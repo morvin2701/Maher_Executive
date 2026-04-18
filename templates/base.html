@@ -25,6 +25,10 @@
     <a class="logo nav-brand-center" href="/">Maher <span>Executive</span></a>
 
     <div class="nav-actions nav-right">
+      <label class="currency-switch" for="currency-selector">
+        <span class="currency-switch-label">Currency</span>
+        <select id="currency-selector" aria-label="Select currency"></select>
+      </label>
       <a href="/search" class="icon-link nav-icon" aria-label="Search" title="Search">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="11" cy="11" r="7"></circle>
@@ -42,6 +46,12 @@
           <path d="M20.8 8.6a5.2 5.2 0 0 0-8.8-3.8A5.2 5.2 0 0 0 3.2 8.6c0 6 8.8 11.4 8.8 11.4s8.8-5.4 8.8-11.4z"></path>
         </svg>
       </a>
+      <a href="/notifications" class="icon-link nav-icon" aria-label="Notifications" title="Notifications" id="nav-notifications">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M18 16H6l1.2-1.8c.5-.8.8-1.8.8-2.8V9a4 4 0 1 1 8 0v2.4c0 1 .3 2 .8 2.8L18 16z"></path>
+          <path d="M10 18a2 2 0 0 0 4 0"></path>
+        </svg>
+      </a>
       <a href="/cart" class="icon-link nav-icon" aria-label="Cart" title="Cart">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 7h12l-1.1 11H7.1L6 7z"></path>
@@ -51,16 +61,34 @@
     </div>
     <button class="nav-burger" type="button" aria-label="Menu" id="nav-burger">☰</button>
   </header>
+  <div id="currency-modal" class="currency-modal" role="dialog" aria-modal="true" aria-labelledby="currency-modal-title">
+    <div class="currency-modal-card">
+      <h3 id="currency-modal-title">Choose your preferred currency</h3>
+      <p>Prices across storefront and admin console will use your selected currency.</p>
+      <label class="currency-switch" for="currency-modal-selector">
+        <span class="currency-switch-label">Currency</span>
+        <select id="currency-modal-selector" aria-label="Currency on first visit"></select>
+      </label>
+      <div class="currency-modal-actions">
+        <button id="currency-modal-save" class="btn btn-primary" type="button">Continue</button>
+      </div>
+    </div>
+  </div>
 
   <main class="main-content">{% block content %}{% endblock %}</main>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script id="firebase-web-config" type="application/json">{{ firebase_web | tojson }}</script>
+  <script id="cloudinary-client-config" type="application/json">{{ cloudinary_client | tojson }}</script>
   <script>
-    window.__FIREBASE_WEB__ = {{ firebase_web | tojson }};
-    window.__CLOUDINARY__ = {{ cloudinary_client | tojson }};
+    const fbNode = document.getElementById("firebase-web-config");
+    const clNode = document.getElementById("cloudinary-client-config");
+    window.__FIREBASE_WEB__ = JSON.parse((fbNode && fbNode.textContent) || "{}");
+    window.__CLOUDINARY__ = JSON.parse((clNode && clNode.textContent) || "{}");
   </script>
+  <script src="{{ url_for('static', filename='js/currency.js') }}"></script>
   <script src="{{ url_for('static', filename='js/firebase-app.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>

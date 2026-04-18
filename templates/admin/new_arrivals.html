@@ -1,0 +1,344 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-arr-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>New Arrivals Studio</h1>
+    <p class="muted">Build a premium arrivals narrative for your homepage with precision control.</p>
+  </div>
+  <button class="btn btn-primary btn-sm" id="arr-open-create">+ Curate New Arrival</button>
+</section>
+
+<section class="admin-arr-kpis">
+  <article>
+    <p>Active Slots</p>
+    <h3 id="arr-kpi-active">0</h3>
+  </article>
+  <article>
+    <p>Total Curated</p>
+    <h3 id="arr-kpi-total">0</h3>
+  </article>
+  <article>
+    <p>Linked Products</p>
+    <h3 id="arr-kpi-products">0</h3>
+  </article>
+</section>
+
+<section class="admin-arr-shell">
+  <aside class="admin-arr-panel">
+    <div class="admin-arr-panel-head">
+      <h3 id="arr-form-title">Create Arrival Slot</h3>
+      <p class="muted">Every field is live and dynamic.</p>
+    </div>
+    <form id="arr-form" class="admin-arr-form">
+      <input type="hidden" id="arr-id" />
+      <label>Product
+        <select id="arr-product" required>
+          <option value="">Select product</option>
+        </select>
+      </label>
+      <label>Badge
+        <input id="arr-badge" placeholder="New Arrival" maxlength="40" />
+      </label>
+      <label>Headline
+        <input id="arr-headline" placeholder="Signature Tailoring Drop" maxlength="120" />
+      </label>
+      <label>Subheadline
+        <input id="arr-subheadline" placeholder="Limited seasonal edit" maxlength="160" />
+      </label>
+      <label>Sort Order
+        <input type="number" id="arr-sort-order" value="1" min="1" step="1" />
+      </label>
+      <label class="admin-arr-check">
+        <input type="checkbox" id="arr-active" checked />
+        <span>Active on homepage</span>
+      </label>
+      <div class="admin-arr-form-actions">
+        <button type="submit" class="btn btn-primary btn-sm" id="arr-save-btn">Save Slot</button>
+        <button type="button" class="btn btn-outline btn-sm" id="arr-reset-btn">Reset</button>
+      </div>
+    </form>
+  </aside>
+
+  <div class="admin-arr-main">
+    <div class="admin-arr-tools">
+      <label class="admin-product-search">
+        <span>⌕</span>
+        <input id="arr-search" placeholder="Search by product name, badge or category..." />
+      </label>
+      <button class="btn btn-outline btn-sm" id="arr-filter">Filter: Active</button>
+    </div>
+    <div id="arr-list" class="admin-arr-list">
+      <p class="muted">Loading arrivals...</p>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (async function () {
+    const state = {
+      arrivals: [],
+      products: [],
+      query: "",
+      filter: "active", // active | inactive | all
+      editingId: null,
+    };
+
+    const els = {
+      form: document.getElementById("arr-form"),
+      formTitle: document.getElementById("arr-form-title"),
+      id: document.getElementById("arr-id"),
+      product: document.getElementById("arr-product"),
+      badge: document.getElementById("arr-badge"),
+      headline: document.getElementById("arr-headline"),
+      subheadline: document.getElementById("arr-subheadline"),
+      sortOrder: document.getElementById("arr-sort-order"),
+      active: document.getElementById("arr-active"),
+      saveBtn: document.getElementById("arr-save-btn"),
+      resetBtn: document.getElementById("arr-reset-btn"),
+      openCreate: document.getElementById("arr-open-create"),
+      search: document.getElementById("arr-search"),
+      filter: document.getElementById("arr-filter"),
+      list: document.getElementById("arr-list"),
+      kpiActive: document.getElementById("arr-kpi-active"),
+      kpiTotal: document.getElementById("arr-kpi-total"),
+      kpiProducts: document.getElementById("arr-kpi-products"),
+    };
+
+    function bearerHeaders() {
+      if (window.getBearerHeaders) return window.getBearerHeaders();
+      const t = localStorage.getItem("idToken");
+      return Promise.resolve(t ? { Authorization: "Bearer " + t } : {});
+    }
+
+    function inr(v) {
+      const n = Number(v || 0);
+      if (window.CurrencyPreference && window.CurrencyPreference.formatFromInr) {
+        return window.CurrencyPreference.formatFromInr(n);
+      }
+      return "₹" + n.toLocaleString("en-IN");
+    }
+
+    function hydrateProductsSelect() {
+      els.product.innerHTML = '<option value="">Select product</option>' + state.products.map((p) => {
+        const name = p.name || "Untitled";
+        const category = String(p.category || "ready-to-wear").replaceAll("-", " ");
+        return '<option value="' + p.id + '">' + name + " · " + category + "</option>";
+      }).join("");
+    }
+
+    function updateKpis() {
+      els.kpiTotal.textContent = String(state.arrivals.length);
+      els.kpiActive.textContent = String(state.arrivals.filter((x) => x.isActive).length);
+      els.kpiProducts.textContent = String(new Set(state.arrivals.map((x) => x.productId).filter(Boolean)).size);
+    }
+
+    function resetForm() {
+      state.editingId = null;
+      els.formTitle.textContent = "Create Arrival Slot";
+      els.saveBtn.textContent = "Save Slot";
+      els.id.value = "";
+      els.product.value = "";
+      els.badge.value = "New Arrival";
+      els.headline.value = "";
+      els.subheadline.value = "";
+      els.sortOrder.value = String(state.arrivals.length + 1 || 1);
+      els.active.checked = true;
+    }
+
+    function openEdit(row) {
+      state.editingId = row.id;
+      els.formTitle.textContent = "Edit Arrival Slot";
+      els.saveBtn.textContent = "Update Slot";
+      els.id.value = row.id || "";
+      els.product.value = row.productId || "";
+      els.badge.value = row.badge || "New Arrival";
+      els.headline.value = row.headline || "";
+      els.subheadline.value = row.subheadline || "";
+      els.sortOrder.value = String(row.sortOrder || 1);
+      els.active.checked = !!row.isActive;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function visibleRows() {
+      const q = state.query.trim().toLowerCase();
+      return state.arrivals
+        .filter((row) => {
+          if (state.filter === "active" && !row.isActive) return false;
+          if (state.filter === "inactive" && row.isActive) return false;
+          if (!q) return true;
+          const p = row.product || {};
+          const text = [p.name, p.category, row.badge, row.headline, row.subheadline]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return text.includes(q);
+        })
+        .sort((a, b) => Number(a.sortOrder || 999) - Number(b.sortOrder || 999));
+    }
+
+    function renderList() {
+      updateKpis();
+      const rows = visibleRows();
+      if (!rows.length) {
+        els.list.innerHTML = '<p class="muted">No curated arrivals match this filter.</p>';
+        return;
+      }
+
+      els.list.innerHTML = rows.map((row) => {
+        const p = row.product || {};
+        const img = (p.images && p.images[0] && p.images[0].url) || "";
+        return (
+          '<article class="admin-arr-card">' +
+            '<div class="admin-arr-thumb">' +
+              (img ? '<img src="' + img + '" alt="' + (p.name || "") + '" loading="lazy" />' : '<div class="skeleton" style="height:120px;"></div>') +
+            "</div>" +
+            '<div class="admin-arr-copy">' +
+              '<div class="admin-arr-copy-top">' +
+                '<p class="admin-arr-badge">' + (row.badge || "New Arrival") + '</p>' +
+                '<span class="admin-status ' + (row.isActive ? "delivered" : "pending") + '">' + (row.isActive ? "ACTIVE" : "PAUSED") + "</span>" +
+              "</div>" +
+              "<h3>" + (p.name || "Missing product") + "</h3>" +
+              '<p class="muted">' + String(p.category || "ready-to-wear").replaceAll("-", " ").toUpperCase() + " · " + inr(p.price || 0) + "</p>" +
+              (row.headline ? "<p>" + row.headline + "</p>" : "") +
+              (row.subheadline ? '<p class="muted">' + row.subheadline + "</p>" : "") +
+            "</div>" +
+            '<div class="admin-arr-side">' +
+              '<span>Sort #' + Number(row.sortOrder || 999) + "</span>" +
+              '<button class="btn btn-outline btn-sm" type="button" data-edit="' + row.id + '">Edit</button>' +
+              '<button class="btn btn-outline btn-sm" type="button" data-toggle="' + row.id + '">' + (row.isActive ? "Deactivate" : "Activate") + "</button>" +
+              '<button class="btn btn-outline btn-sm" type="button" data-delete="' + row.id + '">Delete</button>' +
+            "</div>" +
+          "</article>"
+        );
+      }).join("");
+
+      if (window.CurrencyPreference && window.CurrencyPreference.renderPrices) {
+        window.CurrencyPreference.renderPrices(els.list);
+      }
+
+      els.list.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-edit");
+          const row = state.arrivals.find((x) => x.id === id);
+          if (row) openEdit(row);
+        });
+      });
+
+      els.list.querySelectorAll("[data-toggle]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-toggle");
+          const row = state.arrivals.find((x) => x.id === id);
+          if (!row) return;
+          const h = await bearerHeaders();
+          const res = await fetch("/api/admin/new-arrivals/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ isActive: !row.isActive }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update slot.", "error");
+            return;
+          }
+          row.isActive = !row.isActive;
+          renderList();
+          if (window.showToast) window.showToast("Arrival slot updated.", "success");
+        });
+      });
+
+      els.list.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-delete");
+          if (!id || !window.confirm("Delete this arrival slot?")) return;
+          const h = await bearerHeaders();
+          const res = await fetch("/api/admin/new-arrivals/" + encodeURIComponent(id), {
+            method: "DELETE",
+            headers: { ...h },
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not delete slot.", "error");
+            return;
+          }
+          state.arrivals = state.arrivals.filter((x) => x.id !== id);
+          renderList();
+          if (window.showToast) window.showToast("Arrival slot removed.", "success");
+        });
+      });
+    }
+
+    async function load() {
+      const h = await bearerHeaders();
+      const [arrRes, prodRes] = await Promise.all([
+        fetch("/api/admin/new-arrivals", { headers: { ...h } }),
+        fetch("/api/admin/products", { headers: { ...h } }),
+      ]);
+
+      if (arrRes.status === 401 || arrRes.status === 403 || prodRes.status === 401 || prodRes.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+
+      const arrivalsData = await arrRes.json();
+      const productsData = await prodRes.json();
+      state.products = (productsData.products || []).filter((p) => !!p.id).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      state.arrivals = arrivalsData.arrivals || [];
+      hydrateProductsSelect();
+      resetForm();
+      renderList();
+    }
+
+    els.form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        productId: els.product.value,
+        badge: (els.badge.value || "").trim() || "New Arrival",
+        headline: (els.headline.value || "").trim(),
+        subheadline: (els.subheadline.value || "").trim(),
+        sortOrder: Number(els.sortOrder.value || 999),
+        isActive: !!els.active.checked,
+      };
+      if (!payload.productId) {
+        if (window.showToast) window.showToast("Please select a product.", "warning");
+        return;
+      }
+      const h = await bearerHeaders();
+      const isEdit = !!state.editingId;
+      const url = isEdit ? "/api/admin/new-arrivals/" + encodeURIComponent(state.editingId) : "/api/admin/new-arrivals";
+      const method = isEdit ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method: method,
+        headers: { "Content-Type": "application/json", ...h },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (window.showToast) window.showToast(err.error || "Could not save slot.", "error");
+        return;
+      }
+      await load();
+      if (window.showToast) window.showToast(isEdit ? "Arrival slot updated." : "Arrival slot created.", "success");
+    });
+
+    els.resetBtn.addEventListener("click", () => resetForm());
+    els.openCreate.addEventListener("click", () => resetForm());
+    els.search.addEventListener("input", () => {
+      state.query = els.search.value || "";
+      renderList();
+    });
+    els.filter.addEventListener("click", () => {
+      const order = ["active", "inactive", "all"];
+      const labels = { active: "Active", inactive: "Inactive", all: "All" };
+      const idx = order.indexOf(state.filter);
+      state.filter = order[(idx + 1) % order.length];
+      els.filter.textContent = "Filter: " + labels[state.filter];
+      renderList();
+    });
+
+    await load();
+  })();
+</script>
+{% endblock %}

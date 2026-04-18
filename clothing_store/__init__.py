@@ -122,6 +122,10 @@ def create_app():
     def page_account_returns():
         return render_with_content("account_returns.html", "account_returns")
 
+    @app.get("/notifications")
+    def page_notifications():
+        return render_with_content("notifications.html", "notifications")
+
     @app.get("/size-guide")
     def page_size_guide():
         return render_with_content("size_guide.html", "size_guide")
@@ -206,6 +210,10 @@ def create_app():
     @app.get("/admin/banners")
     def admin_banners():
         return render_with_content("admin/banners.html", "admin_banners")
+
+    @app.get("/admin/new-arrivals")
+    def admin_new_arrivals():
+        return render_with_content("admin/new_arrivals.html", "admin_new_arrivals")
 
     @app.get("/admin/reviews")
     def admin_reviews():

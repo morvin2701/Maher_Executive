@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Notifications — Maher Executive{% endblock %}
+{% block content %}
+<section class="notify-user-shell">
+  <header class="notify-user-head">
+    <div>
+      <p class="crumb muted">Account / Alerts</p>
+      <h1>{{ page_content.title }}</h1>
+      <p class="muted">{{ page_content.subtitle }}</p>
+    </div>
+    <div class="notify-user-actions">
+      <button type="button" class="btn btn-outline btn-sm" id="notify-filter-btn">Filter: All</button>
+      <button type="button" class="btn btn-primary btn-sm" id="notify-mark-all">Mark all read</button>
+    </div>
+  </header>
+
+  <div id="notify-user-feed" class="notify-user-feed">
+    <p class="muted">Loading notifications...</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { rows: [], filter: "all" };
+    const els = {
+      feed: document.getElementById("notify-user-feed"),
+      filterBtn: document.getElementById("notify-filter-btn"),
+      markAll: document.getElementById("notify-mark-all"),
+    };
+
+    function iconFor(type) {
+      const t = String(type || "").toLowerCase();
+      if (t.includes("order")) return "◍";
+      if (t.includes("arrival")) return "✦";
+      if (t.includes("stock")) return "⬢";
+      if (t.includes("address")) return "⌂";
+      return "●";
+    }
+
+    function clsFor(type) {
+      const t = String(type || "").toLowerCase();
+      if (t.includes("order")) return "notify-user-item--order";
+      if (t.includes("arrival")) return "notify-user-item--arrival";
+      if (t.includes("stock")) return "notify-user-item--stock";
+      if (t.includes("address")) return "notify-user-item--address";
+      return "notify-user-item--general";
+    }
+
+    function dateLabel(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "Recent";
+      return d.toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    }
+
+    function visibleRows() {
+      if (state.filter === "all") return state.rows;
+      if (state.filter === "unread") return state.rows.filter((x) => !x.isRead);
+      return state.rows.filter((x) => String(x.type || "").toLowerCase().includes(state.filter));
+    }
+
+    async function markRead(id) {
+      const h = await window.getBearerHeaders();
+      await fetch("/api/notifications/" + encodeURIComponent(id) + "/read", {
+        method: "PUT",
+        headers: { ...h },
+      });
+    }
+
+    function render() {
+      const rows = visibleRows();
+      if (!rows.length) {
+        els.feed.innerHTML = "<p class=\"muted\">No notifications in this view.</p>";
+        return;
+      }
+      els.feed.innerHTML = rows.map((n) =>
+        '<article class="notify-user-item ' + clsFor(n.type) + (n.isRead ? "" : " notify-user-item--unread") + '" data-id="' + n.id + '">' +
+          '<div class="notify-user-icon">' + iconFor(n.type) + "</div>" +
+          '<div class="notify-user-copy">' +
+            "<h3>" + (n.title || "Notification") + "</h3>" +
+            "<p>" + (n.message || "") + "</p>" +
+            '<small>' + dateLabel(n.createdAt) + "</small>" +
+          "</div>" +
+          '<div class="notify-user-meta">' +
+            '<span class="notify-type">' + String(n.type || "general").replaceAll("_", " ") + "</span>" +
+            (!n.isRead ? '<button type="button" class="btn btn-outline btn-sm" data-read="' + n.id + '">Mark read</button>' : '<span class="muted">Read</span>') +
+          "</div>" +
+        "</article>"
+      ).join("");
+
+      els.feed.querySelectorAll("[data-read]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-read");
+          await markRead(id);
+          const row = state.rows.find((x) => x.id === id);
+          if (row) row.isRead = true;
+          render();
+        });
+      });
+
+      els.feed.querySelectorAll(".notify-user-item--unread").forEach((item) => {
+        item.addEventListener("click", async (e) => {
+          if (e.target && e.target.closest("button")) return;
+          const id = item.getAttribute("data-id");
+          const row = state.rows.find((x) => x.id === id);
+          if (!row || row.isRead) return;
+          await markRead(id);
+          row.isRead = true;
+          render();
+        });
+      });
+    }
+
+    async function load() {
+      const h = await window.getBearerHeaders();
+      if (!h.Authorization) {
+        els.feed.innerHTML = '<p class="muted">Please sign in to view notifications.</p>';
+        return;
+      }
+      const res = await fetch("/api/notifications", { headers: { ...h } });
+      if (!res.ok) {
+        els.feed.innerHTML = '<p class="muted">Could not load notifications right now.</p>';
+        return;
+      }
+      const data = await res.json();
+      state.rows = data.notifications || [];
+      render();
+    }
+
+    els.filterBtn.addEventListener("click", () => {
+      const flow = ["all", "unread", "order", "arrival", "stock", "address"];
+      const labels = { all: "All", unread: "Unread", order: "Order", arrival: "Arrivals", stock: "Stock", address: "Address" };
+      const idx = flow.indexOf(state.filter);
+      state.filter = flow[(idx + 1) % flow.length];
+      els.filterBtn.textContent = "Filter: " + labels[state.filter];
+      render();
+    });
+
+    els.markAll.addEventListener("click", async () => {
+      const h = await window.getBearerHeaders();
+      const res = await fetch("/api/notifications/read-all", { method: "POST", headers: { ...h } });
+      if (!res.ok) {
+        if (window.showToast) window.showToast("Could not mark all read.", "error");
+        return;
+      }
+      state.rows = state.rows.map((r) => ({ ...r, isRead: true }));
+      render();
+      if (window.showToast) window.showToast("All notifications marked as read.", "success");
+    });
+
+    await load();
+  })();
+</script>
+{% endblock %}

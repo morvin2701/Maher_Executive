@@ -259,6 +259,15 @@ CONTENT_DEFAULTS = {
             "Admin approval integration",
         ],
     },
+    "notifications": {
+        "title": "Notifications",
+        "subtitle": "Track orders, arrivals, stock updates, and account events in one feed.",
+        "highlights": [
+            "Real-time order and address events",
+            "New arrivals and stock update alerts",
+            "Read and unread state synced per user",
+        ],
+    },
     "size_guide": {
         "title": "Size Guide",
         "subtitle": "Measurement references tailored for premium fit confidence.",
@@ -424,6 +433,15 @@ CONTENT_DEFAULTS = {
             "Position-aware banner records",
             "Date-based activation control",
             "Storefront messaging consistency",
+        ],
+    },
+    "admin_new_arrivals": {
+        "title": "New Arrivals Studio",
+        "subtitle": "Curate the exact products that appear as New Arrivals on the home page.",
+        "highlights": [
+            "Compose an editorial arrivals feed with premium badge text",
+            "Control sequence through sort order and activation status",
+            "Live sync with homepage in a fully dynamic flow",
         ],
     },
     "admin_reviews": {

@@ -24,6 +24,53 @@ from clothing_store.system_settings_defaults import SYSTEM_SETTINGS_DEFAULT, mer
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
+DEFAULT_STORE_LOCATIONS = [
+    {
+        "id": "store-ahmedabad",
+        "name": "Maher Executive Atelier Ahmedabad",
+        "city": "Ahmedabad",
+        "country": "India",
+        "address": "Sindhu Bhavan Road, Bodakdev",
+        "phone": "+91 79 4800 2211",
+        "hours": "10:00 AM - 9:00 PM",
+    },
+    {
+        "id": "store-mumbai",
+        "name": "Maher Executive Maison Mumbai",
+        "city": "Mumbai",
+        "country": "India",
+        "address": "Linking Road, Bandra West",
+        "phone": "+91 22 6119 8811",
+        "hours": "10:30 AM - 9:30 PM",
+    },
+    {
+        "id": "store-london",
+        "name": "Maher Executive London",
+        "city": "London",
+        "country": "United Kingdom",
+        "address": "New Bond Street, Mayfair",
+        "phone": "+44 20 4512 9912",
+        "hours": "9:30 AM - 8:30 PM",
+    },
+    {
+        "id": "store-dubai",
+        "name": "Maher Executive Dubai",
+        "city": "Dubai",
+        "country": "United Arab Emirates",
+        "address": "Fashion Avenue, Dubai Mall",
+        "phone": "+971 4 563 2217",
+        "hours": "10:00 AM - 11:00 PM",
+    },
+]
+
+DEFAULT_CATEGORY_IMAGES = {
+    "women": "https://images.unsplash.com/photo-1495385794356-15371f348c31?auto=format&fit=crop&w=1200&q=80",
+    "men": "https://images.unsplash.com/photo-1617127365659-c47fa864d8bc?auto=format&fit=crop&w=1200&q=80",
+    "kids": "https://images.unsplash.com/photo-1519340241574-2cec6aef0c01?auto=format&fit=crop&w=1200&q=80",
+    "accessories": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=1200&q=80",
+    "footwear": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=1200&q=80",
+}
+
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -140,6 +187,95 @@ def _slugify(value: str) -> str:
     return slug or "category"
 
 
+def _truthy_active(val) -> bool:
+    """Normalize Firestore/client booleans for isActive flags."""
+    if val is None:
+        return True
+    if isinstance(val, bool):
+        return val
+    s = str(val).strip().lower()
+    if s in ("0", "false", "no", "inactive", "off"):
+        return False
+    return True
+
+
+def _first_product_image_url(p: dict) -> str:
+    imgs = p.get("images") or []
+    if not imgs:
+        return ""
+    first = imgs[0]
+    if isinstance(first, str):
+        return first.strip()
+    if isinstance(first, dict):
+        return str(
+            first.get("url")
+            or first.get("secure_url")
+            or first.get("src")
+            or ""
+        ).strip()
+    return ""
+
+
+def _curated_homepage_arrivals(db):
+    """
+    Load active new_arrivals without compound queries (avoids composite index requirements).
+    Sorts by sortOrder in Python.
+    """
+    rows = []
+    try:
+        for d in db.collection("new_arrivals").stream():
+            row = d.to_dict() or {}
+            row["_doc_id"] = d.id
+            rows.append(row)
+    except Exception:
+        return []
+
+    rows.sort(key=lambda r: int(r.get("sortOrder") or 999))
+    arrivals = []
+    for row in rows:
+        if not _truthy_active(row.get("isActive", True)):
+            continue
+        pid = str(row.get("productId") or "").strip()
+        if not pid:
+            continue
+        try:
+            ps = db.collection("products").document(pid).get()
+        except Exception:
+            continue
+        if not ps.exists:
+            continue
+        p = ps.to_dict() or {}
+        if not p.get("isPublished", True):
+            continue
+        p["id"] = ps.id
+        p["arrivalBadge"] = row.get("badge") or "New Arrival"
+        p["arrivalHeadline"] = row.get("headline") or ""
+        p["arrivalSubheadline"] = row.get("subheadline") or ""
+        p["primaryImageUrl"] = _first_product_image_url(p)
+        arrivals.append(_serialize(p))
+        if len(arrivals) >= 24:
+            break
+    return arrivals
+
+
+def _create_user_notification(db, uid: str, ntype: str, title: str, message: str, meta=None):
+    """Best-effort user notification write."""
+    try:
+        nid = uuid.uuid4().hex[:16]
+        doc = {
+            "type": str(ntype or "info").strip().lower(),
+            "title": str(title or "").strip(),
+            "message": str(message or "").strip(),
+            "meta": meta or {},
+            "isRead": False,
+            "createdAt": firestore.SERVER_TIMESTAMP,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }
+        db.collection("users").document(uid).collection("notifications").document(nid).set(doc)
+    except Exception:
+        current_app.logger.exception("create user notification failed")
+
+
 @bp.get("/config")
 def public_config():
     """Client-safe Firebase + Cloudinary settings (no secrets)."""
@@ -230,6 +366,143 @@ def update_me(decoded):
     return jsonify(_serialize({"ok": True, "user": {"uid": uid, **(data or {})}}))
 
 
+@bp.get("/notifications")
+@login_required_json
+def list_my_notifications(decoded):
+    uid = decoded["uid"]
+    db = get_firestore()
+    rows = []
+    read_global = set()
+
+    try:
+        d = db.collection("users").document(uid).collection("notification_meta").document("global_reads").get()
+        if d.exists:
+            payload = d.to_dict() or {}
+            read_global = set(payload.get("ids") or [])
+    except Exception:
+        read_global = set()
+
+    try:
+        docs = db.collection("users").document(uid).collection("notifications").stream()
+        for d in docs:
+            row = d.to_dict() or {}
+            row["id"] = d.id
+            row["scope"] = "user"
+            rows.append(_serialize(row))
+    except Exception:
+        pass
+
+    now_iso = _now_iso()
+    try:
+        gdocs = db.collection("admin_notifications").stream()
+        for d in gdocs:
+            row = d.to_dict() or {}
+            status = str(row.get("status") or "").lower()
+            if status not in {"live", "scheduled"}:
+                continue
+            sched = _serialize(row.get("scheduledAt"))
+            if status == "scheduled" and sched and str(sched) > now_iso:
+                continue
+            gid = "global-" + d.id
+            rows.append(
+                _serialize(
+                    {
+                        "id": gid,
+                        "scope": "global",
+                        "type": str(row.get("type") or "general"),
+                        "title": str(row.get("title") or "Update from Maher Executive"),
+                        "message": str(row.get("message") or ""),
+                        "meta": {"sourceId": d.id, "segment": row.get("segment"), "medium": row.get("medium")},
+                        "isRead": gid in read_global,
+                        "createdAt": row.get("createdAt") or row.get("scheduledAt"),
+                    }
+                )
+            )
+    except Exception:
+        pass
+
+    if not rows:
+        rows = [
+            {
+                "id": "demo-order",
+                "scope": "user",
+                "type": "order_placed",
+                "title": "Order placed successfully",
+                "message": "Your order is confirmed and being prepared.",
+                "isRead": False,
+                "createdAt": _now_iso(),
+                "meta": {},
+            },
+            {
+                "id": "demo-arrival",
+                "scope": "global",
+                "type": "new_arrival",
+                "title": "New arrivals dropped",
+                "message": "Explore the latest premium edits now live.",
+                "isRead": False,
+                "createdAt": _now_iso(),
+                "meta": {},
+            },
+        ]
+
+    rows.sort(key=lambda x: str(x.get("createdAt") or ""), reverse=True)
+    unread = sum(1 for x in rows if not bool(x.get("isRead")))
+    return jsonify({"notifications": rows, "unread": unread})
+
+
+@bp.put("/notifications/<notification_id>/read")
+@login_required_json
+def mark_notification_read(decoded, notification_id):
+    uid = decoded["uid"]
+    db = get_firestore()
+    if str(notification_id).startswith("global-"):
+        doc_id = str(notification_id)
+        ref = db.collection("users").document(uid).collection("notification_meta").document("global_reads")
+        snap = ref.get()
+        ids = []
+        if snap.exists:
+            ids = list((snap.to_dict() or {}).get("ids") or [])
+        if doc_id not in ids:
+            ids.append(doc_id)
+        ref.set({"ids": ids, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
+        return jsonify({"ok": True})
+
+    ref = db.collection("users").document(uid).collection("notifications").document(notification_id)
+    if not ref.get().exists:
+        return jsonify({"error": "not found"}), 404
+    ref.set({"isRead": True, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
+    return jsonify({"ok": True})
+
+
+@bp.post("/notifications/read-all")
+@login_required_json
+def mark_all_notifications_read(decoded):
+    uid = decoded["uid"]
+    db = get_firestore()
+    try:
+        docs = db.collection("users").document(uid).collection("notifications").stream()
+        for d in docs:
+            d.reference.set({"isRead": True, "updatedAt": firestore.SERVER_TIMESTAMP}, merge=True)
+    except Exception:
+        pass
+
+    global_ids = []
+    try:
+        gdocs = db.collection("admin_notifications").stream()
+        for d in gdocs:
+            row = d.to_dict() or {}
+            status = str(row.get("status") or "").lower()
+            if status in {"live", "scheduled"}:
+                global_ids.append("global-" + d.id)
+    except Exception:
+        pass
+    db.collection("users").document(uid).collection("notification_meta").document("global_reads").set(
+        {"ids": global_ids, "updatedAt": firestore.SERVER_TIMESTAMP},
+        merge=True,
+    )
+    return jsonify({"ok": True})
+
+
 @bp.get("/products")
 def list_products():
     category = request.args.get("category")
@@ -249,6 +522,129 @@ def list_products():
     if not items:
         items = [p for p in DEMO_PRODUCTS if (not category or p.get("category") == category)]
     return jsonify({"products": items})
+
+
+@bp.get("/categories")
+def public_categories():
+    db = get_firestore()
+    products = []
+    categories = []
+    try:
+        for d in db.collection("products").where("isPublished", "==", True).stream():
+            row = d.to_dict() or {}
+            row["id"] = d.id
+            products.append(row)
+    except Exception:
+        products = DEMO_PRODUCTS
+
+    counts_by_slug = {}
+    for p in products:
+        slug = _slugify(str(p.get("category") or ""))
+        if not slug:
+            continue
+        counts_by_slug[slug] = counts_by_slug.get(slug, 0) + 1
+
+    try:
+        for d in db.collection("categories").where("status", "==", "active").stream():
+            row = d.to_dict() or {}
+            row["id"] = d.id
+            categories.append(row)
+    except Exception:
+        categories = []
+
+    if not categories:
+        categories = [
+            {"id": slug, "slug": slug, "name": slug.replace("-", " ").title(), "status": "active"}
+            for slug in counts_by_slug.keys()
+        ]
+
+    shaped = []
+    for c in categories:
+        slug = _slugify(str(c.get("slug") or c.get("name") or ""))
+        if not slug:
+            continue
+        count = counts_by_slug.get(slug, int(c.get("productCount") or 0))
+        if count <= 0:
+            continue
+        shaped.append(
+            _serialize(
+                {
+                    "id": c.get("id") or slug,
+                    "name": c.get("name") or slug.replace("-", " ").title(),
+                    "slug": slug,
+                    "productCount": count,
+                    "image": c.get("image") or DEFAULT_CATEGORY_IMAGES.get(slug) or DEFAULT_CATEGORY_IMAGES["accessories"],
+                    "link": "/kids" if "kid" in slug else ("/women" if "women" in slug else ("/men" if slug.startswith("men") else f"/search?q={slug}")),
+                }
+            )
+        )
+    shaped.sort(key=lambda x: str(x.get("name") or ""))
+    return jsonify({"categories": shaped})
+
+
+@bp.get("/store-locations")
+def public_store_locations():
+    db = get_firestore()
+    stores = []
+    try:
+        for d in db.collection("store_locations").where("isActive", "==", True).stream():
+            row = d.to_dict() or {}
+            row["id"] = d.id
+            stores.append(row)
+    except Exception:
+        stores = []
+
+    if not stores:
+        stores = DEFAULT_STORE_LOCATIONS
+
+    stores = sorted(stores, key=lambda x: (str(x.get("country") or ""), str(x.get("city") or ""), str(x.get("name") or "")))
+    return jsonify({"stores": _serialize(stores)})
+
+
+@bp.get("/homepage")
+def homepage_data():
+    categories_payload = public_categories().get_json(silent=True) or {}
+    stores_payload = public_store_locations().get_json(silent=True) or {}
+    arrivals = []
+    try:
+        db = get_firestore()
+        arrivals = _curated_homepage_arrivals(db)
+
+        if not arrivals:
+            docs = []
+            try:
+                docs = list(
+                    db.collection("products")
+                    .where("isPublished", "==", True)
+                    .order_by("updatedAt", direction=firestore.Query.DESCENDING)
+                    .limit(12)
+                    .stream()
+                )
+            except Exception:
+                try:
+                    docs = list(
+                        db.collection("products").where("isPublished", "==", True).limit(30).stream()
+                    )
+                except Exception:
+                    docs = []
+            for d in docs[:12]:
+                row = d.to_dict() or {}
+                row["id"] = d.id
+                row["primaryImageUrl"] = _first_product_image_url(row)
+                arrivals.append(_serialize(row))
+    except Exception:
+        arrivals = []
+        for row in DEMO_PRODUCTS[:8]:
+            r = dict(row)
+            r["primaryImageUrl"] = _first_product_image_url(r)
+            arrivals.append(_serialize(r))
+    return jsonify(
+        {
+            "categories": categories_payload.get("categories", []),
+            "stores": stores_payload.get("stores", []),
+            "arrivals": arrivals,
+        }
+    )
 
 
 @bp.get("/products/slug/<slug>")
@@ -381,6 +777,110 @@ def admin_list_products(decoded):
         row["id"] = d.id
         items.append(row)
     return jsonify({"products": items})
+
+
+@bp.get("/admin/new-arrivals")
+@admin_required_json
+def admin_list_new_arrivals(decoded):
+    db = get_firestore()
+    rows = []
+    try:
+        docs = db.collection("new_arrivals").order_by("sortOrder", direction=firestore.Query.ASCENDING).stream()
+    except Exception:
+        docs = []
+    for d in docs:
+        row = d.to_dict() or {}
+        pid = str(row.get("productId") or "").strip()
+        product = {}
+        if pid:
+            snap = db.collection("products").document(pid).get()
+            if snap.exists:
+                product = snap.to_dict() or {}
+                product["id"] = snap.id
+        rows.append(
+            _serialize(
+                {
+                    "id": d.id,
+                    "productId": pid,
+                    "badge": row.get("badge") or "New Arrival",
+                    "headline": row.get("headline") or "",
+                    "subheadline": row.get("subheadline") or "",
+                    "sortOrder": int(row.get("sortOrder") or 999),
+                    "isActive": bool(row.get("isActive", True)),
+                    "product": product,
+                    "updatedAt": row.get("updatedAt") or row.get("createdAt"),
+                }
+            )
+        )
+    return jsonify({"arrivals": rows})
+
+
+@bp.post("/admin/new-arrivals")
+@admin_required_json
+def admin_create_new_arrival(decoded):
+    data = request.get_json(force=True, silent=True) or {}
+    product_id = str(data.get("productId") or "").strip()
+    if not product_id:
+        return jsonify({"error": "productId required"}), 400
+    db = get_firestore()
+    ps = db.collection("products").document(product_id).get()
+    if not ps.exists:
+        return jsonify({"error": "product not found"}), 404
+    rid = uuid.uuid4().hex[:16]
+    doc = {
+        "productId": product_id,
+        "badge": str(data.get("badge") or "New Arrival").strip(),
+        "headline": str(data.get("headline") or "").strip(),
+        "subheadline": str(data.get("subheadline") or "").strip(),
+        "sortOrder": int(data.get("sortOrder") or 999),
+        "isActive": bool(data.get("isActive", True)),
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }
+    db.collection("new_arrivals").document(rid).set(doc)
+    return jsonify({"id": rid})
+
+
+@bp.put("/admin/new-arrivals/<arrival_id>")
+@admin_required_json
+def admin_update_new_arrival(decoded, arrival_id):
+    data = request.get_json(force=True, silent=True) or {}
+    db = get_firestore()
+    ref = db.collection("new_arrivals").document(arrival_id)
+    if not ref.get().exists:
+        return jsonify({"error": "not found"}), 404
+    patch = {}
+    if "productId" in data:
+        pid = str(data.get("productId") or "").strip()
+        if not pid:
+            return jsonify({"error": "productId cannot be empty"}), 400
+        if not db.collection("products").document(pid).get().exists:
+            return jsonify({"error": "product not found"}), 404
+        patch["productId"] = pid
+    if "badge" in data:
+        patch["badge"] = str(data.get("badge") or "").strip() or "New Arrival"
+    if "headline" in data:
+        patch["headline"] = str(data.get("headline") or "").strip()
+    if "subheadline" in data:
+        patch["subheadline"] = str(data.get("subheadline") or "").strip()
+    if "sortOrder" in data:
+        patch["sortOrder"] = int(data.get("sortOrder") or 999)
+    if "isActive" in data:
+        patch["isActive"] = bool(data.get("isActive"))
+    patch["updatedAt"] = firestore.SERVER_TIMESTAMP
+    ref.set(patch, merge=True)
+    return jsonify({"ok": True})
+
+
+@bp.delete("/admin/new-arrivals/<arrival_id>")
+@admin_required_json
+def admin_delete_new_arrival(decoded, arrival_id):
+    db = get_firestore()
+    ref = db.collection("new_arrivals").document(arrival_id)
+    if not ref.get().exists:
+        return jsonify({"error": "not found"}), 404
+    ref.delete()
+    return jsonify({"ok": True})
 
 
 @bp.get("/admin/dashboard")
@@ -1494,6 +1994,8 @@ def admin_update_notification(decoded, notification_id):
         patch["openRate"] = float(data.get("openRate") or 0)
     if "openedCount" in data:
         patch["openedCount"] = int(data.get("openedCount") or 0)
+    if "scheduledAt" in data:
+        patch["scheduledAt"] = data.get("scheduledAt") or None
 
     ref.set(patch, merge=True)
     return jsonify({"ok": True})
@@ -2069,6 +2571,14 @@ def create_order(decoded):
     except Exception:
         current_app.logger.exception("create_order failed")
         return jsonify({"error": "order failed"}), 500
+    _create_user_notification(
+        db,
+        uid,
+        "order_placed",
+        "Order placed successfully",
+        f"Your order #{oid[:8].upper()} has been placed.",
+        {"orderId": oid, "total": server_total},
+    )
     return jsonify({"orderId": oid})
 
 
@@ -2150,6 +2660,14 @@ def create_address(decoded):
     ref.set(doc)
     if doc.get("isDefault"):
         _clear_other_default_addresses(db, uid, aid)
+    _create_user_notification(
+        db,
+        uid,
+        "address_saved",
+        "Address saved",
+        f"{data.get('label') or 'Address'} address has been saved to your account.",
+        {"addressId": aid},
+    )
     return jsonify({"id": aid})
 
 
@@ -2181,6 +2699,14 @@ def update_address(decoded, address_id):
     ref.set(patch, merge=True)
     if patch.get("isDefault") is True:
         _clear_other_default_addresses(db, uid, address_id)
+    _create_user_notification(
+        db,
+        uid,
+        "address_saved",
+        "Address updated",
+        "Your shipping address has been updated successfully.",
+        {"addressId": address_id},
+    )
     return jsonify({"ok": True})
 
 

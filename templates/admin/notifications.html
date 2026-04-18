@@ -1,62 +1,131 @@
 {% extends "admin/base_admin.html" %}
 {% block admin_title %}{{ page_content.title }}{% endblock %}
 {% block admin_content %}
-<section class="admin-com-head">
+<section class="notify-head">
   <div>
     <p class="admin-eyebrow">Management Suite</p>
-    <h1>Brand Communications</h1>
-    <p class="muted">Manage member notifications and retail broadcasts.</p>
+    <h1>Notification Studio</h1>
+    <p class="muted">Premium campaign control center for in-app, push, and email communication.</p>
   </div>
-  <button class="btn btn-primary btn-sm" id="com-new-btn">Initialize Broadcast</button>
+  <button class="btn btn-primary btn-sm" id="notify-new-btn">+ New Campaign</button>
 </section>
 
-<section class="admin-com-kpis">
-  <article class="admin-com-kpi">
-    <p>Total Reach</p>
-    <h3 id="com-kpi-reach">-</h3>
-  </article>
-  <article class="admin-com-kpi">
-    <p>Active Campaigns</p>
-    <h3 id="com-kpi-active">-</h3>
-  </article>
-  <article class="admin-com-kpi">
-    <p>Avg Open Rate</p>
-    <h3 id="com-kpi-open">-</h3>
-  </article>
+<section class="notify-kpis">
+  <article><p>Total Reach</p><h3 id="notify-kpi-reach">-</h3></article>
+  <article><p>Live Campaigns</p><h3 id="notify-kpi-active">-</h3></article>
+  <article><p>Avg Open Rate</p><h3 id="notify-kpi-open">-</h3></article>
+  <article><p>Total Campaigns</p><h3 id="notify-kpi-total">-</h3></article>
 </section>
 
-<section class="admin-product-panel admin-com-panel">
-  <p class="admin-com-table-title">Transmission History</p>
-  <div class="admin-product-table-wrap">
-    <table class="admin-product-table admin-com-table">
-      <thead>
-        <tr>
-          <th>Communication Title</th>
-          <th>Target Segment</th>
-          <th>Reach</th>
-          <th>Timestamp</th>
-          <th>Medium</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="com-table-body">
-        <tr><td colspan="6" class="muted">Loading communications...</td></tr>
-      </tbody>
-    </table>
+<section class="notify-shell">
+  <aside class="notify-form-wrap">
+    <div class="notify-form-head">
+      <h3 id="notify-form-title">Create Campaign</h3>
+      <p class="muted">All fields are dynamic and directly synced to Firestore.</p>
+    </div>
+    <form id="notify-form" class="notify-form">
+      <input type="hidden" id="notify-id" />
+      <label>Campaign Title
+        <input id="notify-title" maxlength="120" required placeholder="Festival Exclusive Early Access" />
+      </label>
+      <label>Message
+        <textarea id="notify-message" rows="4" maxlength="320" required placeholder="Your private drop is now live."></textarea>
+      </label>
+      <label>Segment
+        <input id="notify-segment" maxlength="80" placeholder="All App Users" />
+      </label>
+      <label>Medium
+        <select id="notify-medium">
+          <option value="global_in-app">Global In-App</option>
+          <option value="push_notification">Push Notification</option>
+          <option value="email_campaign">Email Campaign</option>
+          <option value="sms">SMS</option>
+          <option value="whatsapp">WhatsApp</option>
+        </select>
+      </label>
+      <label>Status
+        <select id="notify-status">
+          <option value="live">Live</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="draft">Draft</option>
+          <option value="paused">Paused</option>
+          <option value="archived">Archived</option>
+        </select>
+      </label>
+      <label>Scheduled Time (optional)
+        <input type="datetime-local" id="notify-scheduled-at" />
+      </label>
+      <div class="notify-metrics">
+        <label>Reach
+          <input type="number" id="notify-reach" min="0" value="0" />
+        </label>
+        <label>Opened Count
+          <input type="number" id="notify-opened" min="0" value="0" />
+        </label>
+      </div>
+      <div class="notify-form-actions">
+        <button type="submit" class="btn btn-primary btn-sm" id="notify-save-btn">Save Campaign</button>
+        <button type="button" class="btn btn-outline btn-sm" id="notify-reset-btn">Reset</button>
+      </div>
+    </form>
+  </aside>
+
+  <div class="notify-main">
+    <div class="notify-tools">
+      <label class="admin-product-search">
+        <span>⌕</span>
+        <input id="notify-search" placeholder="Search by title, message, segment, medium..." />
+      </label>
+      <button class="btn btn-outline btn-sm" id="notify-filter-btn">Status: All</button>
+      <button class="btn btn-outline btn-sm" id="notify-sort-btn">Sort: Latest</button>
+    </div>
+    <div id="notify-list" class="notify-list">
+      <p class="muted">Loading notifications...</p>
+    </div>
   </div>
 </section>
 {% endblock %}
 {% block scripts %}
 <script>
   (async function () {
-    const state = { rows: [] };
-    const els = {
-      body: document.getElementById("com-table-body"),
-      kpiReach: document.getElementById("com-kpi-reach"),
-      kpiActive: document.getElementById("com-kpi-active"),
-      kpiOpen: document.getElementById("com-kpi-open"),
-      newBtn: document.getElementById("com-new-btn"),
+    const state = {
+      rows: [],
+      query: "",
+      statusFilter: "all",
+      sort: "latest",
+      editingId: null,
     };
+
+    const els = {
+      list: document.getElementById("notify-list"),
+      kpiReach: document.getElementById("notify-kpi-reach"),
+      kpiActive: document.getElementById("notify-kpi-active"),
+      kpiOpen: document.getElementById("notify-kpi-open"),
+      kpiTotal: document.getElementById("notify-kpi-total"),
+      newBtn: document.getElementById("notify-new-btn"),
+      form: document.getElementById("notify-form"),
+      formTitle: document.getElementById("notify-form-title"),
+      id: document.getElementById("notify-id"),
+      title: document.getElementById("notify-title"),
+      message: document.getElementById("notify-message"),
+      segment: document.getElementById("notify-segment"),
+      medium: document.getElementById("notify-medium"),
+      status: document.getElementById("notify-status"),
+      scheduledAt: document.getElementById("notify-scheduled-at"),
+      reach: document.getElementById("notify-reach"),
+      opened: document.getElementById("notify-opened"),
+      saveBtn: document.getElementById("notify-save-btn"),
+      resetBtn: document.getElementById("notify-reset-btn"),
+      search: document.getElementById("notify-search"),
+      filterBtn: document.getElementById("notify-filter-btn"),
+      sortBtn: document.getElementById("notify-sort-btn"),
+    };
+
+    function bearerHeaders() {
+      if (window.getBearerHeaders) return window.getBearerHeaders();
+      const t = localStorage.getItem("idToken");
+      return Promise.resolve(t ? { Authorization: "Bearer " + t } : {});
+    }
 
     function formatReach(v) {
       const n = Number(v || 0);
@@ -75,67 +144,137 @@
       if (val === "paused" || val === "draft") return "pending";
       return "cancelled";
     }
+    function toLocalDateInput(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "";
+      const tzOffset = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    }
+    function fromLocalDateInput(raw) {
+      if (!raw) return null;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toISOString();
+    }
+    function deriveOpenRate(row) {
+      const explicit = Number(row.openRate || 0);
+      if (explicit > 0) return explicit;
+      const reach = Number(row.reach || 0);
+      const opened = Number(row.openedCount || 0);
+      if (!reach) return 0;
+      return (opened / reach) * 100;
+    }
+    function statusFlowNext(st) {
+      const flow = ["live", "scheduled", "paused", "draft", "archived"];
+      const idx = flow.indexOf(String(st || "live"));
+      return flow[(idx + 1) % flow.length];
+    }
+    function resetForm() {
+      state.editingId = null;
+      els.formTitle.textContent = "Create Campaign";
+      els.saveBtn.textContent = "Save Campaign";
+      els.id.value = "";
+      els.title.value = "";
+      els.message.value = "";
+      els.segment.value = "All App Users";
+      els.medium.value = "global_in-app";
+      els.status.value = "live";
+      els.scheduledAt.value = "";
+      els.reach.value = "0";
+      els.opened.value = "0";
+    }
+    function startEdit(row) {
+      state.editingId = row.id;
+      els.formTitle.textContent = "Edit Campaign";
+      els.saveBtn.textContent = "Update Campaign";
+      els.id.value = row.id || "";
+      els.title.value = row.title || "";
+      els.message.value = row.message || "";
+      els.segment.value = row.segment || "All App Users";
+      els.medium.value = row.medium || "global_in-app";
+      els.status.value = row.status || "live";
+      els.scheduledAt.value = toLocalDateInput(row.scheduledAt);
+      els.reach.value = String(Number(row.reach || 0));
+      els.opened.value = String(Number(row.openedCount || 0));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
 
     function renderKpis(kpis) {
       els.kpiReach.textContent = Number(kpis.totalReach || 0).toLocaleString("en-IN");
       els.kpiActive.textContent = Number(kpis.activeCampaigns || 0) + " Live";
       els.kpiOpen.textContent = Number(kpis.avgOpenRate || 0).toFixed(1) + "%";
+      els.kpiTotal.textContent = String(state.rows.length || 0);
+    }
+
+    function visibleRows() {
+      let out = state.rows.slice();
+      if (state.statusFilter !== "all") {
+        out = out.filter((r) => String(r.status || "").toLowerCase() === state.statusFilter);
+      }
+      const q = state.query.trim().toLowerCase();
+      if (q) {
+        out = out.filter((r) =>
+          [r.title, r.message, r.segment, r.medium, r.status].filter(Boolean).join(" ").toLowerCase().includes(q)
+        );
+      }
+      if (state.sort === "latest") {
+        out.sort((a, b) => String(b.createdAt || b.scheduledAt || "").localeCompare(String(a.createdAt || a.scheduledAt || "")));
+      } else if (state.sort === "reach") {
+        out.sort((a, b) => Number(b.reach || 0) - Number(a.reach || 0));
+      } else if (state.sort === "open") {
+        out.sort((a, b) => deriveOpenRate(b) - deriveOpenRate(a));
+      }
+      return out;
     }
 
     function renderRows() {
-      if (!state.rows.length) {
-        els.body.innerHTML = '<tr><td colspan="6" class="muted">No communications found in Firebase.</td></tr>';
+      const rows = visibleRows();
+      if (!rows.length) {
+        els.list.innerHTML = '<p class="muted">No communications found for this filter.</p>';
         return;
       }
-      els.body.innerHTML = state.rows
+
+      els.list.innerHTML = rows
         .map(
           (r) =>
-            "<tr>" +
-            '<td><div class="admin-com-title"><span>◉</span><div><strong>' +
-            (r.title || "") +
-            "</strong><p>" +
-            (r.message || "") +
-            "</p></div></div></td>" +
-            "<td>" +
-            (r.segment || "") +
-            "</td>" +
-            "<td>" +
-            formatReach(r.reach) +
-            "</td>" +
-            "<td>" +
-            formatDate(r.createdAt || r.scheduledAt) +
-            "</td>" +
-            "<td>" +
-            (r.medium || "") +
-            '<br/><span class="admin-status ' +
-            statusClass(r.status) +
-            '">' +
-            String(r.status || "").toUpperCase() +
-            "</span></td>" +
-            '<td><div class="admin-prod-actions">' +
-            '<button type="button" data-cycle="' +
+            '<article class="notify-card">' +
+            '<div class="notify-card-top">' +
+            '<p class="notify-medium">' + (r.medium || "global_in-app") + "</p>" +
+            '<span class="admin-status ' + statusClass(r.status) + '">' + String(r.status || "").toUpperCase() + "</span>" +
+            "</div>" +
+            "<h3>" + (r.title || "") + "</h3>" +
+            '<p class="notify-msg">' + (r.message || "") + "</p>" +
+            '<div class="notify-meta">' +
+            "<span>Segment: " + (r.segment || "-") + "</span>" +
+            "<span>Reach: " + formatReach(r.reach) + "</span>" +
+            "<span>Open Rate: " + deriveOpenRate(r).toFixed(1) + "%</span>" +
+            "<span>When: " + formatDate(r.scheduledAt || r.createdAt) + "</span>" +
+            "</div>" +
+            '<div class="notify-actions">' +
+            '<button type="button" class="btn btn-outline btn-sm" data-cycle="' +
             r.id +
-            '">Cycle</button>' +
-            '<button type="button" data-edit="' +
+            '">Status</button>' +
+            '<button type="button" class="btn btn-outline btn-sm" data-edit="' +
             r.id +
             '">Edit</button>' +
-            '<button type="button" data-delete="' +
+            '<button type="button" class="btn btn-outline btn-sm" data-dup="' +
+            r.id +
+            '">Duplicate</button>' +
+            '<button type="button" class="btn btn-outline btn-sm" data-delete="' +
             r.id +
             '">Delete</button>' +
-            "</div></td>" +
-            "</tr>"
+            "</div>" +
+            "</article>"
         )
         .join("");
 
-      els.body.querySelectorAll("[data-cycle]").forEach((btn) => {
+      els.list.querySelectorAll("[data-cycle]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-cycle");
           const row = state.rows.find((x) => x.id === id);
           if (!id || !row) return;
-          const flow = ["live", "scheduled", "paused", "archived"];
-          const idx = flow.indexOf(String(row.status || "live"));
-          const next = flow[(idx + 1) % flow.length];
-          const h = await window.getBearerHeaders();
+          const next = statusFlowNext(row.status);
+          const h = await bearerHeaders();
           const res = await fetch("/api/admin/notifications/" + encodeURIComponent(id), {
             method: "PUT",
             headers: { "Content-Type": "application/json", ...h },
@@ -149,38 +288,51 @@
         });
       });
 
-      els.body.querySelectorAll("[data-edit]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
+      els.list.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => {
           const id = btn.getAttribute("data-edit");
           const row = state.rows.find((x) => x.id === id);
           if (!id || !row) return;
-          const title = window.prompt("Broadcast title", row.title || "");
-          if (title === null) return;
-          const message = window.prompt("Broadcast message", row.message || "");
-          if (message === null) return;
-          const segment = window.prompt("Target segment", row.segment || "");
-          if (segment === null) return;
-          const medium = window.prompt("Medium", row.medium || "");
-          if (medium === null) return;
-          const h = await window.getBearerHeaders();
-          const res = await fetch("/api/admin/notifications/" + encodeURIComponent(id), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json", ...h },
-            body: JSON.stringify({ title, message, segment, medium }),
-          });
-          if (!res.ok) {
-            if (window.showToast) window.showToast("Could not edit broadcast.", "error");
-            return;
-          }
-          await load();
+          startEdit(row);
         });
       });
 
-      els.body.querySelectorAll("[data-delete]").forEach((btn) => {
+      els.list.querySelectorAll("[data-dup]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-dup");
+          const row = state.rows.find((x) => x.id === id);
+          if (!row) return;
+          const h = await bearerHeaders();
+          const payload = {
+            title: (row.title || "") + " (Copy)",
+            message: row.message || "",
+            segment: row.segment || "All App Users",
+            medium: row.medium || "global_in-app",
+            status: "draft",
+            reach: Number(row.reach || 0),
+            openedCount: Number(row.openedCount || 0),
+            openRate: Number(row.openRate || 0),
+            scheduledAt: row.scheduledAt || null,
+          };
+          const res = await fetch("/api/admin/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not duplicate campaign.", "error");
+            return;
+          }
+          await load();
+          if (window.showToast) window.showToast("Campaign duplicated.", "success");
+        });
+      });
+
+      els.list.querySelectorAll("[data-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete");
           if (!id || !window.confirm("Delete this broadcast?")) return;
-          const h = await window.getBearerHeaders();
+          const h = await bearerHeaders();
           const res = await fetch("/api/admin/notifications/" + encodeURIComponent(id), {
             method: "DELETE",
             headers: { ...h },
@@ -195,7 +347,7 @@
     }
 
     async function load() {
-      const h = await window.getBearerHeaders();
+      const h = await bearerHeaders();
       const res = await fetch("/api/admin/notifications", { headers: { ...h } });
       if (res.status === 401 || res.status === 403) {
         document.querySelector(".admin-lux-content").innerHTML =
@@ -208,40 +360,80 @@
       renderRows();
     }
 
-    els.newBtn.addEventListener("click", async () => {
-      const title = window.prompt("Broadcast title");
-      if (!title) return;
-      const message = window.prompt("Broadcast message");
-      if (!message) return;
-      const segment = window.prompt("Target segment", "All App Users");
-      if (segment === null) return;
-      const medium = window.prompt("Medium", "global_in-app");
-      if (medium === null) return;
-      const h = await window.getBearerHeaders();
-      const res = await fetch("/api/admin/notifications", {
-        method: "POST",
+    els.form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const title = (els.title.value || "").trim();
+      const message = (els.message.value || "").trim();
+      if (!title || !message) {
+        if (window.showToast) window.showToast("Title and message are required.", "warning");
+        return;
+      }
+      const reach = Number(els.reach.value || 0);
+      const openedCount = Number(els.opened.value || 0);
+      const payload = {
+        title: title,
+        message: message,
+        segment: (els.segment.value || "All App Users").trim(),
+        medium: (els.medium.value || "global_in-app").trim(),
+        status: (els.status.value || "live").trim().toLowerCase(),
+        scheduledAt: fromLocalDateInput(els.scheduledAt.value),
+        reach: Math.max(0, reach),
+        openedCount: Math.max(0, openedCount),
+        openRate: reach > 0 ? (Math.max(0, openedCount) / reach) * 100 : 0,
+      };
+
+      const isEdit = !!state.editingId;
+      const endpoint = isEdit
+        ? "/api/admin/notifications/" + encodeURIComponent(state.editingId)
+        : "/api/admin/notifications";
+      const method = isEdit ? "PUT" : "POST";
+      const h = await bearerHeaders();
+      const res = await fetch(endpoint, {
+        method: method,
         headers: { "Content-Type": "application/json", ...h },
-        body: JSON.stringify({
-          title,
-          message,
-          segment,
-          medium,
-          status: "live",
-          reach: 0,
-          openRate: 0,
-          openedCount: 0,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        if (window.showToast) window.showToast(err.error || "Could not create broadcast.", "error");
+        if (window.showToast) window.showToast(err.error || "Could not save campaign.", "error");
         return;
       }
       await load();
-      if (window.showToast) window.showToast("Broadcast initialized.", "success");
+      resetForm();
+      if (window.showToast) window.showToast(isEdit ? "Campaign updated." : "Campaign created.", "success");
+    });
+
+    els.newBtn.addEventListener("click", () => {
+      resetForm();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    els.resetBtn.addEventListener("click", () => resetForm());
+    els.search.addEventListener("input", () => {
+      state.query = els.search.value || "";
+      renderRows();
+    });
+
+    els.filterBtn.addEventListener("click", () => {
+      const flow = ["all", "live", "scheduled", "paused", "draft", "archived"];
+      const labels = { all: "All", live: "Live", scheduled: "Scheduled", paused: "Paused", draft: "Draft", archived: "Archived" };
+      const idx = flow.indexOf(state.statusFilter);
+      state.statusFilter = flow[(idx + 1) % flow.length];
+      els.filterBtn.textContent = "Status: " + labels[state.statusFilter];
+      renderRows();
+    });
+
+    els.sortBtn.addEventListener("click", () => {
+      const flow = ["latest", "reach", "open"];
+      const labels = { latest: "Latest", reach: "Reach", open: "Open Rate" };
+      const idx = flow.indexOf(state.sort);
+      state.sort = flow[(idx + 1) % flow.length];
+      els.sortBtn.textContent = "Sort: " + labels[state.sort];
+      renderRows();
     });
 
     await load();
+    resetForm();
   })();
 </script>
 {% endblock %}

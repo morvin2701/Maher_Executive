@@ -20,29 +20,28 @@ Edit</h1>
       <p class="crumb muted">{{ page_content.curation.eyebrow }}</p>
       <h2 class="section-title" style="margin:0;">{{ page_content.curation.title }}</h2>
     </div>
-    <a class="crumb" href="/women">{{ page_content.curation.viewAllText }} →</a>
+    <a class="crumb" href="/shop">{{ page_content.curation.viewAllText }} →</a>
   </div>
-  <div class="curation-grid">
-    {% for card in page_content.curation["items"] %}
-      <a class="curation-card" href="{{ card.link }}">
-        <img src="{{ card.image }}" alt="{{ card.name }}" loading="lazy" />
-        <div class="curation-overlay">
-          <p>{{ card.pieces }} pieces</p>
-          <h3>{{ card.name }}</h3>
-        </div>
-      </a>
-    {% endfor %}
+  <div id="home-categories" class="curation-grid">
+    <div class="skeleton" style="height:280px;"></div>
+    <div class="skeleton" style="height:280px;"></div>
+    <div class="skeleton" style="height:280px;"></div>
+    <div class="skeleton" style="height:280px;"></div>
   </div>
 </section>
 
 <section class="home-arrivals">
 <h2 class="section-title">{{ page_content.arrivals.title }}</h2>
 <p class="muted" style="margin-top:-1rem;">{{ page_content.arrivals.subtitle }}</p>
-<div id="home-products" class="product-grid">
-  <div class="skeleton" style="height:320px;"></div>
-  <div class="skeleton" style="height:320px;"></div>
-  <div class="skeleton" style="height:320px;"></div>
-  <div class="skeleton" style="height:320px;"></div>
+<div class="home-arrivals-marquee" id="home-arrivals-marquee" aria-label="New arrivals carousel">
+  <div class="home-arrivals-fade home-arrivals-fade--left" aria-hidden="true"></div>
+  <div class="home-arrivals-fade home-arrivals-fade--right" aria-hidden="true"></div>
+  <div class="home-arrivals-track" id="home-arrivals-track">
+    <div class="skeleton home-arrivals-skel"></div>
+    <div class="skeleton home-arrivals-skel"></div>
+    <div class="skeleton home-arrivals-skel"></div>
+    <div class="skeleton home-arrivals-skel"></div>
+  </div>
 </div>
 </section>
 
@@ -55,6 +54,21 @@ Edit</h1>
   </div>
   <div class="heritage-media">
     <img src="{{ page_content.heritage.image }}" alt="Heritage story" loading="lazy" />
+  </div>
+</section>
+
+<section class="home-stores">
+  <div class="home-curation-head">
+    <div>
+      <p class="crumb muted">Offline Stores</p>
+      <h2 class="section-title" style="margin:0;">Visit Our Flagship Locations</h2>
+    </div>
+  </div>
+  <div id="home-stores-grid" class="home-stores-grid">
+    <div class="skeleton" style="height:180px;"></div>
+    <div class="skeleton" style="height:180px;"></div>
+    <div class="skeleton" style="height:180px;"></div>
+    <div class="skeleton" style="height:180px;"></div>
   </div>
 </section>
 
@@ -84,35 +98,103 @@ Edit</h1>
 {% block scripts %}
 <script>
   (async function () {
-    const root = document.getElementById("home-products");
+    const track = document.getElementById("home-arrivals-track");
+    const marqueeHost = document.getElementById("home-arrivals-marquee");
+    const categoriesRoot = document.getElementById("home-categories");
+    const storesRoot = document.getElementById("home-stores-grid");
+
+    function primaryImageUrl(p) {
+      if (p.primaryImageUrl) return p.primaryImageUrl;
+      const im = p.images && p.images[0];
+      if (!im) return "";
+      if (typeof im === "string") return im;
+      return im.url || im.secure_url || im.src || "";
+    }
+
+    function buildArrivalCardHtml(p) {
+      const img = primaryImageUrl(p);
+      const badges = [];
+      if (p.arrivalBadge) badges.push('<span class="badge">' + String(p.arrivalBadge).replace(/</g, "") + "</span>");
+      if (p.isNew) badges.push('<span class="badge">New</span>');
+      if (p.discount) badges.push('<span class="badge">Sale</span>');
+      return (
+        '<article class="card-product home-arrivals-card">' +
+        '<a href="/product/' + encodeURIComponent(p.slug) + '">' +
+        (img
+          ? '<img src="' + img + '" alt="" loading="lazy" decoding="async" />'
+          : '<div class="skeleton" style="height:280px"></div>') +
+        '<div class="card-body">' +
+        badges.join(" ") +
+        (p.arrivalHeadline ? '<p class="home-arrivals-headline">' + String(p.arrivalHeadline).replace(/</g, "") + "</p>" : "") +
+        (p.arrivalSubheadline ? '<p class="muted home-arrivals-sub">' + String(p.arrivalSubheadline).replace(/</g, "") + "</p>" : "") +
+        '<h3 style="font-family:var(--font-display);font-size:1.1rem;margin:0.5rem 0;">' + (p.name || "") + "</h3>" +
+        '<p class="muted" style="font-size:0.76rem;letter-spacing:0.12em;text-transform:uppercase;">' +
+        String(p.category || "Ready-to-wear").replace(/-/g, " ") +
+        "</p>" +
+        '<p class="price-row"><span data-price-inr="' + (p.price || 0) + '"></span></p>' +
+        "</div></a></article>"
+      );
+    }
+
     try {
-      const res = await fetch("/api/products?limit=8");
+      const res = await fetch("/api/homepage");
       const data = await res.json();
-      root.innerHTML = "";
-      (data.products || []).slice(0, 8).forEach((p, index) => {
-        const img = (p.images && p.images[0] && p.images[0].url) || "";
-        const card = document.createElement("article");
-        card.className = "card-product";
-        const badges = [];
-        if (p.isNew) badges.push('<span class="badge">New</span>');
-        if (p.discount) badges.push('<span class="badge">Sale</span>');
+      const categories = data.categories || [];
+      const arrivals = data.arrivals || [];
+      const stores = data.stores || [];
+
+      categoriesRoot.innerHTML = "";
+      categories.slice(0, 8).forEach((c) => {
+        const card = document.createElement("a");
+        card.className = "curation-card";
+        card.href = c.link || ("/shop?category=" + encodeURIComponent(c.slug || ""));
         card.innerHTML =
-          '<a href="/product/' + encodeURIComponent(p.slug) + '">' +
-          (img ? '<img src="' + img + '" alt="" loading="lazy" />' : '<div class="skeleton" style="height:280px"></div>') +
-          '<div class="card-body">' +
-          badges.join(" ") +
-          '<h3 style="font-family:var(--font-display);font-size:1.1rem;margin:0.5rem 0;">' + (p.name || "") + "</h3>" +
-          '<p class="muted" style="font-size:0.76rem;letter-spacing:0.12em;text-transform:uppercase;">' + (p.category || "Ready-to-wear") + "</p>" +
-          '<p class="price-row"><span>₹' + (p.price || 0) + "</span></p>" +
-          "</div></a>";
-        card.style.animationDelay = (index * 60) + "ms";
-        root.appendChild(card);
+          '<img src="' + (c.image || "") + '" alt="' + (c.name || "") + '" loading="lazy" />' +
+          '<div class="curation-overlay">' +
+          "<p>" + (c.productCount || 0) + " pieces</p>" +
+          "<h3>" + (c.name || "") + "</h3>" +
+          "</div>";
+        categoriesRoot.appendChild(card);
       });
-      if (!data.products || !data.products.length) {
-        root.innerHTML = "<p class=\"muted\">No products yet — run the Firestore seed script and deploy rules.</p>";
+      if (!categories.length) {
+        categoriesRoot.innerHTML = "<p class=\"muted\">No live categories yet.</p>";
+      }
+
+      track.innerHTML = "";
+      if (!arrivals.length) {
+        track.innerHTML = "<p class=\"muted home-arrivals-empty\">No products yet — curate New Arrivals in Admin or publish catalog items.</p>";
+        if (marqueeHost) marqueeHost.classList.add("home-arrivals-marquee--static");
+      } else {
+        const html = arrivals.map(buildArrivalCardHtml).join("");
+        track.innerHTML = html + html;
+        const dur = Math.min(90, Math.max(24, arrivals.length * 7));
+        track.style.setProperty("--home-marquee-duration", dur + "s");
+        if (marqueeHost) marqueeHost.classList.remove("home-arrivals-marquee--static");
+      }
+
+      storesRoot.innerHTML = "";
+      stores.slice(0, 4).forEach((store) => {
+        const el = document.createElement("article");
+        el.className = "store-card";
+        el.innerHTML =
+          "<h4>" + (store.name || "") + "</h4>" +
+          '<p class="muted">' + [store.city, store.country].filter(Boolean).join(", ") + "</p>" +
+          "<p>" + (store.address || "") + "</p>" +
+          '<p class="muted">Hours: ' + (store.hours || "10:00 AM - 9:00 PM") + "</p>" +
+          (store.phone ? '<p><a href="tel:' + store.phone + '">' + store.phone + "</a></p>" : "");
+        storesRoot.appendChild(el);
+      });
+      if (!stores.length) {
+        storesRoot.innerHTML = "<p class=\"muted\">Offline store details will be available soon.</p>";
+      }
+
+      if (window.CurrencyPreference && typeof window.CurrencyPreference.renderPrices === "function") {
+        window.CurrencyPreference.renderPrices(document.body);
       }
     } catch (e) {
-      root.innerHTML = "<p class=\"muted\">Could not load products. Check Firebase credentials and seed data.</p>";
+      track.innerHTML = "<p class=\"muted\">Could not load products. Check Firebase credentials and seed data.</p>";
+      categoriesRoot.innerHTML = "<p class=\"muted\">Could not load categories right now.</p>";
+      storesRoot.innerHTML = "<p class=\"muted\">Could not load store locations right now.</p>";
     }
   })();
 
