@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Search — ME Clothing{% endblock %}
+{% block content %}
+<section class="search-shell">
+  <div class="search-head">
+    <label for="search-input" class="search-input-wrap">
+      <span class="search-icon">⌕</span>
+      <input id="search-input" type="text" placeholder="Discover the collection..." autocomplete="off" />
+    </label>
+    <p class="search-hint">Press Enter to search</p>
+  </div>
+
+  <div class="search-layout">
+    <aside class="search-left">
+      <div class="search-block">
+        <p class="search-kicker">Trending Searches</p>
+        <div id="search-trending" class="search-chip-list"></div>
+      </div>
+      <div class="search-block">
+        <p class="search-kicker">Recent History</p>
+        <div id="search-history" class="search-history-list"></div>
+      </div>
+    </aside>
+
+    <section class="search-right">
+      <div class="search-explore-head">
+        <p class="search-kicker">Visual Explorations</p>
+      </div>
+      <div id="search-explorations" class="search-explore-grid"></div>
+      <div id="search-results" class="search-results-grid"></div>
+    </section>
+  </div>
+</section>
+{% include "partials/shared_home_footer.html" %}
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const trends = [
+      "Cashmere Outerwear",
+      "Silk Evening Gowns",
+      "Handcrafted Leather",
+      "Winter Edit 2026",
+      "Minimalist Tailoring"
+    ];
+    const explorations = [
+      {
+        title: "Ready-to-Wear",
+        link: "/women",
+        image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1200&q=80"
+      },
+      {
+        title: "Accessories",
+        link: "/women",
+        image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=1200&q=80"
+      },
+      {
+        title: "Footwear",
+        link: "/men",
+        image: "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=1200&q=80"
+      }
+    ];
+
+    const input = document.getElementById("search-input");
+    const trendingRoot = document.getElementById("search-trending");
+    const historyRoot = document.getElementById("search-history");
+    const exploreRoot = document.getElementById("search-explorations");
+    const resultsRoot = document.getElementById("search-results");
+    const HISTORY_KEY = "search_history_v1";
+    let products = [];
+
+    function getHistory() {
+      const raw = localStorage.getItem(HISTORY_KEY) || "[]";
+      const list = JSON.parse(raw);
+      return Array.isArray(list) ? list : [];
+    }
+
+    function saveHistory(term) {
+      if (!term) return;
+      const next = getHistory().filter((x) => x.toLowerCase() !== term.toLowerCase());
+      next.unshift(term);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(next.slice(0, 8)));
+      renderHistory();
+    }
+
+    function renderTrending() {
+      trendingRoot.innerHTML = trends
+        .map((term) => '<button class="search-chip" type="button" data-term="' + term + '">' + term + "</button>")
+        .join("");
+      trendingRoot.querySelectorAll("[data-term]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          input.value = btn.getAttribute("data-term") || "";
+          runSearch(input.value.trim());
+        });
+      });
+    }
+
+    function renderHistory() {
+      const list = getHistory();
+      if (!list.length) {
+        historyRoot.innerHTML = '<p class="muted" style="margin:0;">No recent searches</p>';
+        return;
+      }
+      historyRoot.innerHTML = list
+        .map((term) => '<button class="search-history-item" type="button" data-history="' + term + '">' + term + "</button>")
+        .join("");
+      historyRoot.querySelectorAll("[data-history]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          input.value = btn.getAttribute("data-history") || "";
+          runSearch(input.value.trim());
+        });
+      });
+    }
+
+    function renderExplorations() {
+      exploreRoot.innerHTML = explorations
+        .map(
+          (item) =>
+            '<a class="search-explore-card" href="' +
+            item.link +
+            '" style="background-image:linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.72)), url(' +
+            item.image +
+            ')">' +
+            '<span>Shop</span><h3>' +
+            item.title +
+            "</h3></a>"
+        )
+        .join("");
+    }
+
+    function renderResults(items, query) {
+      if (!query) {
+        resultsRoot.innerHTML = "";
+        return;
+      }
+      if (!items.length) {
+        resultsRoot.innerHTML = '<div class="search-empty">No products found for "<strong>' + query + '</strong>"</div>';
+        return;
+      }
+      resultsRoot.innerHTML = items
+        .slice(0, 12)
+        .map((p) => {
+          const img = (p.images && p.images[0] && p.images[0].url) || "";
+          return (
+            '<article class="search-result-card">' +
+            '<a href="/product/' +
+            encodeURIComponent(p.slug) +
+            '">' +
+            (img ? '<img src="' + img + '" alt="' + (p.name || "") + '" loading="lazy" />' : "") +
+            '<div class="search-result-body">' +
+            "<h4>" +
+            (p.name || "Product") +
+            "</h4>" +
+            "<p>" +
+            (p.category || "Collection") +
+            "</p>" +
+            "<strong>₹" +
+            Number(p.price || 0).toLocaleString("en-IN") +
+            "</strong>" +
+            "</div></a></article>"
+          );
+        })
+        .join("");
+    }
+
+    function runSearch(query) {
+      const term = (query || "").trim();
+      const q = term.toLowerCase();
+      const filtered = products.filter((p) => {
+        const text = [p.name, p.description, p.category, p.subcategory, p.brand]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return text.includes(q);
+      });
+      renderResults(filtered, term);
+      if (term) saveHistory(term);
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        runSearch(input.value);
+      }
+    });
+
+    renderTrending();
+    renderHistory();
+    renderExplorations();
+
+    try {
+      const res = await fetch("/api/products?limit=500");
+      const data = await res.json();
+      products = data.products || [];
+    } catch (_err) {
+      products = [];
+    }
+  })();
+</script>
+{% endblock %}

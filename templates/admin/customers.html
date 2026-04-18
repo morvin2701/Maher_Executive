@@ -1,0 +1,168 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-cus-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>Clientele</h1>
+    <p class="muted">Manage customer relationships and loyalty profiles.</p>
+  </div>
+  <button class="btn btn-primary btn-sm" id="direct-invite-btn">Direct Invite</button>
+</section>
+
+<section class="admin-cus-tools">
+  <label class="admin-product-search">
+    <span>⌕</span>
+    <input id="customer-search" placeholder="Search client by name or email..." />
+  </label>
+  <button class="btn btn-outline btn-sm" id="vip-filter-btn">VIP Filtering</button>
+</section>
+
+<section class="admin-product-panel">
+  <div class="admin-product-table-wrap">
+    <table class="admin-product-table admin-cus-table">
+      <thead>
+        <tr>
+          <th>Profile</th>
+          <th>Client Tier</th>
+          <th>Orders</th>
+          <th>Total Spend</th>
+          <th>Member Since</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="customers-table-body">
+        <tr><td colspan="6" class="muted">Loading customers...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { all: [], shown: [], q: "", vipOnly: false };
+    const els = {
+      body: document.getElementById("customers-table-body"),
+      search: document.getElementById("customer-search"),
+      vipBtn: document.getElementById("vip-filter-btn"),
+      inviteBtn: document.getElementById("direct-invite-btn"),
+    };
+
+    function money(v) {
+      return "₹" + Number(v || 0).toLocaleString("en-IN");
+    }
+    function dateStr(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "Recent";
+      return d.toISOString().slice(0, 10);
+    }
+    function initials(name) {
+      const parts = String(name || "").split(" ").filter(Boolean);
+      if (!parts.length) return "CL";
+      return parts.slice(0, 2).map((x) => x[0].toUpperCase()).join("");
+    }
+    function tierLabel(tier) {
+      return String(tier || "signature").toUpperCase();
+    }
+    function tierIcon(tier) {
+      if (tier === "private") return "♔";
+      if (tier === "gold") return "◆";
+      return "•";
+    }
+
+    function applyFilters() {
+      const q = state.q.trim().toLowerCase();
+      state.shown = state.all.filter((c) => {
+        const vipMatch = state.vipOnly ? (c.tier === "private" || c.tier === "gold") : true;
+        if (!vipMatch) return false;
+        if (!q) return true;
+        return [c.name, c.email].filter(Boolean).join(" ").toLowerCase().includes(q);
+      });
+      render();
+    }
+
+    function render() {
+      if (!state.shown.length) {
+        els.body.innerHTML = '<tr><td colspan="6" class="muted">No customers found.</td></tr>';
+        return;
+      }
+      els.body.innerHTML = state.shown
+        .map(
+          (c) =>
+            "<tr>" +
+            '<td><div class="admin-cus-profile"><span class="admin-cus-avatar">' +
+            initials(c.name) +
+            "</span><div><strong>" +
+            (c.name || "Client") +
+            "</strong><p>" +
+            (c.email || "") +
+            "</p></div></div></td>" +
+            "<td><span class='admin-cus-tier'>" + tierIcon(c.tier) + " " + tierLabel(c.tier) + "</span></td>" +
+            "<td>" + Number(c.orders || 0) + "</td>" +
+            "<td>" + money(c.totalSpend) + "</td>" +
+            "<td>" + dateStr(c.memberSince) + "</td>" +
+            '<td><div class="admin-prod-actions">' +
+            '<button type="button" data-mail="' + (c.email || "") + '">✉</button>' +
+            '<button type="button" data-more="' + (c.id || "") + '">...</button>' +
+            "</div></td>" +
+            "</tr>"
+        )
+        .join("");
+
+      els.body.querySelectorAll("[data-mail]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const mail = btn.getAttribute("data-mail");
+          if (!mail) {
+            if (window.showToast) window.showToast("No email available for this client.", "warning");
+            return;
+          }
+          window.location.href = "mailto:" + encodeURIComponent(mail);
+        });
+      });
+      els.body.querySelectorAll("[data-more]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (window.showToast) window.showToast("Customer detail panel can be added next.", "info");
+        });
+      });
+    }
+
+    async function load() {
+      const h = await window.getBearerHeaders();
+      const params = new URLSearchParams();
+      if (state.q) params.set("q", state.q);
+      if (state.vipOnly) params.set("vipOnly", "1");
+      const url = "/api/admin/customers" + (params.toString() ? "?" + params.toString() : "");
+      const res = await fetch(url, { headers: { ...h } });
+      if (res.status === 401 || res.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+      const data = await res.json();
+      state.all = data.customers || [];
+      state.shown = state.all.slice();
+      applyFilters();
+    }
+
+    els.search.addEventListener("input", () => {
+      state.q = els.search.value || "";
+      load();
+    });
+
+    els.vipBtn.addEventListener("click", () => {
+      state.vipOnly = !state.vipOnly;
+      els.vipBtn.textContent = state.vipOnly ? "VIP Filtering: ON" : "VIP Filtering";
+      load();
+    });
+
+    els.inviteBtn.addEventListener("click", () => {
+      const email = window.prompt("Direct invite email");
+      if (!email) return;
+      window.location.href = "mailto:" + encodeURIComponent(email) + "?subject=" + encodeURIComponent("Maher Executive Invite");
+    });
+
+    await load();
+  })();
+</script>
+{% endblock %}

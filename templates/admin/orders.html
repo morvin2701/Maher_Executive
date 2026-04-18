@@ -1,0 +1,189 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-ord-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>Acquisitions</h1>
+    <p class="muted">Manage customer orders and fulfillment logistics.</p>
+  </div>
+  <button type="button" class="btn btn-primary btn-sm" id="orders-export-btn">Export Reports</button>
+</section>
+
+<section class="admin-ord-tabs" id="orders-tabs">
+  <button data-status="all" class="active">All</button>
+  <button data-status="processing">Processing</button>
+  <button data-status="payment_pending">Payment Pending</button>
+  <button data-status="ready_to_ship">Ready to Ship</button>
+  <button data-status="shipped">Shipped</button>
+  <button data-status="delivered">Delivered</button>
+  <button data-status="cancelled">Cancelled</button>
+</section>
+
+<section class="admin-ord-tools">
+  <label class="admin-product-search">
+    <span>⌕</span>
+    <input id="orders-search" placeholder="Search order ID or customer..." />
+  </label>
+  <button class="btn btn-outline btn-sm" id="orders-refresh">Global Filters</button>
+</section>
+
+<section class="admin-product-panel">
+  <div class="admin-product-table-wrap">
+    <table class="admin-product-table admin-ord-table">
+      <thead>
+        <tr>
+          <th>Order Meta</th>
+          <th>Acquired By</th>
+          <th>Line Items</th>
+          <th>Total Value</th>
+          <th>Current Status</th>
+          <th>Gateway</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="orders-table-body">
+        <tr><td colspan="7" class="muted">Loading orders...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { all: [], shown: [], status: "all", q: "" };
+    const els = {
+      body: document.getElementById("orders-table-body"),
+      tabs: document.getElementById("orders-tabs"),
+      search: document.getElementById("orders-search"),
+      refresh: document.getElementById("orders-refresh"),
+      exportBtn: document.getElementById("orders-export-btn"),
+    };
+
+    function money(v) {
+      return "₹" + Number(v || 0).toLocaleString("en-IN");
+    }
+    function prettyStatus(st) {
+      return String(st || "pending").replaceAll("_", " ").toUpperCase();
+    }
+    function dateTime(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "Recent";
+      return d.toISOString().slice(0, 16).replace("T", " ");
+    }
+
+    function render() {
+      const rows = state.shown;
+      if (!rows.length) {
+        els.body.innerHTML = '<tr><td colspan="7" class="muted">No orders found.</td></tr>';
+        return;
+      }
+      els.body.innerHTML = rows
+        .map(
+          (o) =>
+            "<tr>" +
+            "<td><strong>#" + (o.orderCode || "ORD") + "</strong><p class='admin-order-time'>" + dateTime(o.placedAt) + "</p></td>" +
+            "<td>" + (o.customer || "Customer") + "</td>" +
+            "<td>" + Number(o.lineItems || 0) + "</td>" +
+            "<td>" + money(o.totalValue) + "</td>" +
+            '<td><select class="admin-order-status" data-id="' +
+            o.id +
+            '">' +
+            ["processing","payment_pending","ready_to_ship","shipped","delivered","cancelled","pending"]
+              .map((s) => '<option value="' + s + '"' + (s === o.status ? " selected" : "") + ">" + prettyStatus(s) + "</option>")
+              .join("") +
+            "</select></td>" +
+            "<td>" + (o.gateway || "N/A") + "</td>" +
+            '<td><div class="admin-prod-actions"><a href="/admin/orders/' + encodeURIComponent(o.id) + '">Open</a></div></td>' +
+            "</tr>"
+        )
+        .join("");
+
+      els.body.querySelectorAll(".admin-order-status").forEach((sel) => {
+        sel.addEventListener("change", async () => {
+          const id = sel.getAttribute("data-id");
+          if (!id) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/orders/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ status: sel.value }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update status.", "error");
+            return;
+          }
+          const row = state.all.find((x) => x.id === id);
+          if (row) row.status = sel.value;
+          if (window.showToast) window.showToast("Status updated.", "success");
+          applyFilters();
+        });
+      });
+    }
+
+    function applyFilters() {
+      const q = state.q.trim().toLowerCase();
+      state.shown = state.all.filter((o) => {
+        const stMatch = state.status === "all" ? true : String(o.status || "") === state.status;
+        if (!stMatch) return false;
+        if (!q) return true;
+        return [o.orderCode, o.customer, o.gateway].filter(Boolean).join(" ").toLowerCase().includes(q);
+      });
+      render();
+    }
+
+    async function loadOrders() {
+      const h = await window.getBearerHeaders();
+      const params = new URLSearchParams();
+      if (state.status !== "all") params.set("status", state.status);
+      if (state.q) params.set("q", state.q);
+      const url = "/api/admin/orders" + (params.toString() ? "?" + params.toString() : "");
+      const res = await fetch(url, { headers: { ...h } });
+      if (res.status === 401 || res.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+      const data = await res.json();
+      state.all = data.orders || [];
+      applyFilters();
+    }
+
+    els.tabs.querySelectorAll("[data-status]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        els.tabs.querySelectorAll("[data-status]").forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+        state.status = btn.getAttribute("data-status") || "all";
+        loadOrders();
+      });
+    });
+
+    els.search.addEventListener("input", () => {
+      state.q = els.search.value || "";
+      loadOrders();
+    });
+
+    els.refresh.addEventListener("click", () => loadOrders());
+
+    els.exportBtn.addEventListener("click", () => {
+      const head = ["order_code", "customer", "line_items", "total_value", "status", "gateway"];
+      const lines = state.shown.map((o) =>
+        [o.orderCode, o.customer, o.lineItems, o.totalValue, o.status, o.gateway]
+          .map((v) => '"' + String(v ?? "").replaceAll('"', '""') + '"')
+          .join(",")
+      );
+      const csv = [head.join(","), ...lines].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "orders_report.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    await loadOrders();
+  })();
+</script>
+{% endblock %}

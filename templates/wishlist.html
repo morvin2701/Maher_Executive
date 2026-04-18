@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Wishlist — ME Clothing{% endblock %}
+{% block content %}
+<section class="account-shell" data-account-page="wishlist">
+  <aside class="account-sidebar">
+    <div class="account-member-card">
+      <div class="account-member-avatar" id="account-avatar">A</div>
+      <div>
+        <p class="account-member-name" id="account-name-side">Maher Executive</p>
+        <p class="account-member-tier">Elite Member</p>
+      </div>
+    </div>
+    <nav class="account-nav">
+      <a href="/account/profile">Personal Details</a>
+      <a href="/account/orders">Order History</a>
+      <a href="/account/addresses">Shipping Addresses</a>
+      <a class="active" href="/wishlist">My Wishlist</a>
+      <button type="button" id="account-signout">Sign Out</button>
+    </nav>
+  </aside>
+
+  <div class="account-main">
+    <h1>My Wishlist</h1>
+    <div class="account-title-line"></div>
+    <div id="wishlist-list" class="wishlist-grid"></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/account.js') }}"></script>
+{% endblock %}

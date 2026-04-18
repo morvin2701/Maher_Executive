@@ -1,0 +1,183 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-ban-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>Visual Assets</h1>
+    <p class="muted">Manage creatives, banners and frame visuals.</p>
+  </div>
+  <button class="btn btn-primary btn-sm" id="upload-asset-btn">+ Upload Asset</button>
+</section>
+
+<section id="banner-list" class="admin-ban-list">
+  <p class="muted">Loading visual assets...</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { rows: [] };
+    const root = document.getElementById("banner-list");
+    const uploadBtn = document.getElementById("upload-asset-btn");
+
+    function kViews(v) {
+      const n = Number(v || 0);
+      if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+      return String(n);
+    }
+    function statusClass(st) {
+      const s = String(st || "draft").toLowerCase();
+      if (s === "live") return "delivered";
+      if (s === "scheduled") return "shipped";
+      return "pending";
+    }
+
+    async function load() {
+      const h = await window.getBearerHeaders();
+      const res = await fetch("/api/admin/banners", { headers: { ...h } });
+      if (res.status === 401 || res.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+      const data = await res.json();
+      state.rows = data.banners || [];
+      render();
+    }
+
+    function render() {
+      if (!state.rows.length) {
+        root.innerHTML = '<p class="muted">No assets available.</p>';
+        return;
+      }
+      root.innerHTML = state.rows
+        .map(
+          (b) =>
+            '<article class="admin-ban-item">' +
+            '<div class="admin-ban-grip">⋮⋮</div>' +
+            '<img src="' +
+            (b.image || "") +
+            '" alt="' +
+            (b.title || "") +
+            '" loading="lazy" />' +
+            '<div class="admin-ban-copy">' +
+            "<h3>" +
+            (b.title || "Untitled Banner") +
+            ' <span class="admin-status ' +
+            statusClass(b.status) +
+            '">' +
+            String(b.status || "draft").toUpperCase() +
+            "</span></h3>" +
+            "<p>" +
+            (b.subtitle || "") +
+            "</p>" +
+            "</div>" +
+            '<div class="admin-ban-engage"><small>Engagements</small><strong>' +
+            kViews(b.engagement) +
+            "</strong></div>" +
+            '<div class="admin-ban-actions">' +
+            '<button type="button" data-view="' +
+            b.id +
+            '">◉</button>' +
+            '<button type="button" data-edit="' +
+            b.id +
+            '">✎</button>' +
+            '<button type="button" data-delete="' +
+            b.id +
+            '">⌫</button>' +
+            "</div>" +
+            "</article>"
+        )
+        .join("");
+
+      root.querySelectorAll("[data-view]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-view");
+          const row = state.rows.find((x) => x.id === id);
+          if (!id || !row) return;
+          window.open(row.image, "_blank");
+          const h = await window.getBearerHeaders();
+          await fetch("/api/admin/banners/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ engagement: Number(row.engagement || 0) + 1 }),
+          });
+          row.engagement = Number(row.engagement || 0) + 1;
+          render();
+        });
+      });
+
+      root.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-edit");
+          const row = state.rows.find((x) => x.id === id);
+          if (!id || !row) return;
+          const title = window.prompt("Asset title", row.title || "");
+          if (!title) return;
+          const subtitle = window.prompt("Asset subtitle", row.subtitle || "") || "";
+          const status = window.prompt("Status: live / scheduled / draft", row.status || "draft") || row.status;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/banners/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ title: title, subtitle: subtitle, status: status }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update asset.", "error");
+            return;
+          }
+          row.title = title;
+          row.subtitle = subtitle;
+          row.status = status.toLowerCase();
+          render();
+          if (window.showToast) window.showToast("Asset updated.", "success");
+        });
+      });
+
+      root.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-delete");
+          if (!id || !window.confirm("Delete this asset?")) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/banners/" + encodeURIComponent(id), {
+            method: "DELETE",
+            headers: { ...h },
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not delete asset.", "error");
+            return;
+          }
+          state.rows = state.rows.filter((x) => x.id !== id);
+          render();
+          if (window.showToast) window.showToast("Asset deleted.", "success");
+        });
+      });
+    }
+
+    uploadBtn.addEventListener("click", async () => {
+      const title = window.prompt("Asset title");
+      if (!title) return;
+      const image = window.prompt("Image URL (Cloudinary preferred)");
+      if (!image) return;
+      const subtitle = window.prompt("Subtitle / placement note", "Hero Main - Home Page") || "";
+      const status = window.prompt("Status: live / scheduled / draft", "draft") || "draft";
+      const h = await window.getBearerHeaders();
+      const res = await fetch("/api/admin/banners", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...h },
+        body: JSON.stringify({ title, image, subtitle, status }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (window.showToast) window.showToast(err.error || "Could not upload asset.", "error");
+        return;
+      }
+      await load();
+      if (window.showToast) window.showToast("Asset uploaded.", "success");
+    });
+
+    await load();
+  })();
+</script>
+{% endblock %}

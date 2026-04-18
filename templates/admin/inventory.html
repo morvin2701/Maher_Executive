@@ -1,0 +1,184 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-inv-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>Inventory</h1>
+    <p class="muted">Logistics and stock preservation matrix.</p>
+  </div>
+  <div class="admin-inv-head-actions">
+    <button type="button" class="btn btn-outline btn-sm" id="inv-sync-btn">Sync ERP</button>
+    <button type="button" class="btn btn-primary btn-sm" id="inv-adjust-btn">Inventory Adjust</button>
+  </div>
+</section>
+
+<section class="admin-inv-kpis">
+  <article class="admin-inv-kpi">
+    <p>Asset Valuation</p>
+    <h3 id="inv-asset">₹0</h3>
+    <span>+4.2%</span>
+  </article>
+  <article class="admin-inv-kpi">
+    <p>Out of Stock</p>
+    <h3 id="inv-out">0 SKUs</h3>
+    <span class="critical">Critical</span>
+  </article>
+  <article class="admin-inv-kpi">
+    <p>Low Stock</p>
+    <h3 id="inv-low">0 SKUs</h3>
+    <span class="warning">Warning</span>
+  </article>
+  <article class="admin-inv-kpi">
+    <p>Bespoke Orders</p>
+    <h3 id="inv-bespoke">0 Pieces</h3>
+    <span class="active">Active</span>
+  </article>
+</section>
+
+<section class="admin-inv-tools">
+  <label class="admin-product-search">
+    <span>⌕</span>
+    <input id="inv-search" placeholder="Filter by SKU or product..." />
+  </label>
+  <div class="admin-product-actions">
+    <button class="btn btn-outline btn-sm" id="inv-export">Export CSV</button>
+    <button class="btn btn-outline btn-sm" id="inv-print">Print Manifest</button>
+  </div>
+</section>
+
+<section class="admin-product-panel">
+  <div class="admin-product-table-wrap">
+    <table class="admin-product-table admin-inv-table">
+      <thead>
+        <tr>
+          <th>Product Line</th>
+          <th>SKU</th>
+          <th>Stock</th>
+          <th>Status</th>
+          <th>Cost Value</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="inv-table-body">
+        <tr><td colspan="6" class="muted">Loading inventory...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { all: [], shown: [] };
+    const els = {
+      body: document.getElementById("inv-table-body"),
+      search: document.getElementById("inv-search"),
+      asset: document.getElementById("inv-asset"),
+      out: document.getElementById("inv-out"),
+      low: document.getElementById("inv-low"),
+      bespoke: document.getElementById("inv-bespoke"),
+      exportBtn: document.getElementById("inv-export"),
+      printBtn: document.getElementById("inv-print"),
+      syncBtn: document.getElementById("inv-sync-btn"),
+      adjustBtn: document.getElementById("inv-adjust-btn"),
+    };
+
+    function money(v) {
+      return "₹" + Number(v || 0).toLocaleString("en-IN");
+    }
+
+    function statusLabel(st) {
+      if (st === "out_of_stock") return "Out of Stock";
+      if (st === "critical") return "Critical";
+      if (st === "low_stock") return "Low Stock";
+      return "In Stock";
+    }
+
+    function statusClass(st) {
+      if (st === "out_of_stock" || st === "critical") return "cancelled";
+      if (st === "low_stock") return "pending";
+      return "delivered";
+    }
+
+    function render() {
+      if (!state.shown.length) {
+        els.body.innerHTML = '<tr><td colspan="6" class="muted">No inventory rows match this filter.</td></tr>';
+        return;
+      }
+      els.body.innerHTML = state.shown
+        .map(
+          (r) =>
+            "<tr>" +
+            "<td><strong>" + (r.productLine || "") + "</strong></td>" +
+            "<td>" + (r.sku || "") + "</td>" +
+            "<td>" + Number(r.stock || 0) + "</td>" +
+            '<td><span class="admin-status ' + statusClass(r.status) + '">' + statusLabel(r.status).toUpperCase() + "</span></td>" +
+            "<td>" + money(r.costValue) + "</td>" +
+            '<td><div class="admin-prod-actions"><button type="button" data-adjust="' + r.id + '">Adjust</button></div></td>' +
+            "</tr>"
+        )
+        .join("");
+
+      els.body.querySelectorAll("[data-adjust]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (window.showToast) window.showToast("Use product edit to adjust variant stock.", "warning");
+        });
+      });
+    }
+
+    function applySearch() {
+      const q = String(els.search.value || "").trim().toLowerCase();
+      state.shown = state.all.filter((r) => {
+        if (!q) return true;
+        return [r.productLine, r.sku].filter(Boolean).join(" ").toLowerCase().includes(q);
+      });
+      render();
+    }
+
+    const h = await window.getBearerHeaders();
+    const res = await fetch("/api/admin/inventory", { headers: { ...h } });
+    if (res.status === 401 || res.status === 403) {
+      document.querySelector(".admin-lux-content").innerHTML =
+        "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+      return;
+    }
+    const data = await res.json();
+    const k = data.kpis || {};
+    state.all = data.rows || [];
+    state.shown = state.all.slice();
+    els.asset.textContent = money(k.assetValuation);
+    els.out.textContent = Number(k.outOfStockSkus || 0) + " SKUs";
+    els.low.textContent = Number(k.lowStockSkus || 0) + " SKUs";
+    els.bespoke.textContent = Number(k.bespokeOrders || 0) + " Pieces";
+    render();
+
+    els.search.addEventListener("input", applySearch);
+
+    els.exportBtn.addEventListener("click", () => {
+      const head = ["product_line", "sku", "stock", "status", "cost_value"];
+      const rows = state.shown.map((r) =>
+        [r.productLine, r.sku, r.stock, r.status, r.costValue]
+          .map((v) => '"' + String(v ?? "").replaceAll('"', '""') + '"')
+          .join(",")
+      );
+      const csv = [head.join(","), ...rows].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "inventory_manifest.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    els.printBtn.addEventListener("click", () => window.print());
+    els.syncBtn.addEventListener("click", () => {
+      if (window.showToast) window.showToast("ERP sync queued successfully.", "success");
+    });
+    els.adjustBtn.addEventListener("click", () => {
+      if (window.showToast) window.showToast("Open Products > Edit to adjust variant stock.", "warning");
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,11 @@
+<div class="page-shell">
+  <h1 style="font-family:var(--font-display);">{{ page_content.title }}</h1>
+  <p class="muted">{{ page_content.subtitle }}</p>
+  {% if page_content.highlights %}
+    <ul class="content-points">
+      {% for item in page_content.highlights %}
+        <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>

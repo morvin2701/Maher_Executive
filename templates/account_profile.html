@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Profile — ME Clothing{% endblock %}
+{% block content %}
+<section class="account-shell" data-account-page="profile">
+  <aside class="account-sidebar">
+    <div class="account-member-card">
+      <div class="account-member-avatar" id="account-avatar">A</div>
+      <div>
+        <p class="account-member-name" id="account-name-side">Maher Executive</p>
+        <p class="account-member-tier">Elite Member</p>
+      </div>
+    </div>
+    <nav class="account-nav">
+      <a class="active" href="/account/profile">Personal Details</a>
+      <a href="/account/orders">Order History</a>
+      <a href="/account/addresses">Shipping Addresses</a>
+      <a href="/wishlist">My Wishlist</a>
+      <button type="button" id="account-signout">Sign Out</button>
+    </nav>
+  </aside>
+
+  <div class="account-main">
+    <h1>Personal Details</h1>
+    <div class="account-title-line"></div>
+
+    <div class="account-info-grid">
+      <div class="account-field">
+        <p>Full Name</p>
+        <h3 id="profile-name">Maher Executive</h3>
+      </div>
+      <div class="account-field">
+        <p>Email Address</p>
+        <h3 id="profile-email">muse@aura.luxury</h3>
+      </div>
+      <div class="account-field">
+        <p>Contact Number</p>
+        <h3 id="profile-phone">+91 00000 00000</h3>
+      </div>
+      <div class="account-field">
+        <p>Account Preference</p>
+        <h3>Bespoke Concierge</h3>
+      </div>
+    </div>
+
+    <div class="account-inline-edit">
+      <div class="field">
+        <label>Name</label>
+        <input id="profile-name-input" />
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input id="profile-phone-input" />
+      </div>
+      <button type="button" class="btn btn-outline" id="profile-save">Save Profile</button>
+    </div>
+
+    <button type="button" class="btn btn-outline account-cta" id="profile-edit">Edit Profile</button>
+  </div>
+</section>
+{% include "partials/shared_home_footer.html" %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/account.js') }}"></script>
+{% endblock %}

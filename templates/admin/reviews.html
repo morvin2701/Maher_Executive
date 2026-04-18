@@ -1,0 +1,179 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-rev-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>{{ page_content.title }}</h1>
+    <p class="muted">{{ page_content.subtitle }}</p>
+  </div>
+  <div class="admin-rev-head-actions">
+    <button type="button" class="btn btn-primary btn-sm" id="rev-all-btn">All Feed</button>
+    <button type="button" class="btn btn-outline btn-sm" id="rev-report-btn">Reports</button>
+  </div>
+</section>
+
+<section id="reviews-list" class="admin-rev-list">
+  <p class="muted">Loading reviews...</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { all: [], mode: "all" };
+    const root = document.getElementById("reviews-list");
+    const allBtn = document.getElementById("rev-all-btn");
+    const reportBtn = document.getElementById("rev-report-btn");
+
+    function dateStr(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toISOString().slice(0, 10);
+    }
+    function stars(n) {
+      const value = Math.max(0, Math.min(5, Number(n || 0)));
+      return "★".repeat(value) + "☆".repeat(5 - value);
+    }
+    function statusClass(st) {
+      const s = String(st || "pending").toLowerCase();
+      if (s === "approved") return "delivered";
+      if (s === "escalated") return "cancelled";
+      if (s === "rejected") return "cancelled";
+      return "pending";
+    }
+
+    function filtered() {
+      if (state.mode === "all") return state.all;
+      return state.all.filter((r) => r.status === state.mode);
+    }
+
+    function render() {
+      const rows = filtered();
+      if (!rows.length) {
+        root.innerHTML = '<p class="muted">No reviews found for this filter.</p>';
+        return;
+      }
+      root.innerHTML = rows
+        .map(
+          (r) =>
+            '<article class="admin-rev-item">' +
+            '<div class="admin-rev-top">' +
+            '<div class="admin-rev-user">' +
+            '<span class="admin-rev-avatar">◌</span>' +
+            "<div><h3>" +
+            (r.name || "") +
+            "</h3>" +
+            "<p>Acquired " +
+            (r.productName || "") +
+            (dateStr(r.createdAt) ? " • " + dateStr(r.createdAt) : "") +
+            "</p></div></div>" +
+            '<div class="admin-rev-stars">' +
+            stars(r.rating) +
+            "</div></div>" +
+            '<blockquote>"' +
+            (r.comment || "") +
+            '"</blockquote>' +
+            '<div class="admin-rev-foot">' +
+            '<span class="admin-status ' +
+            statusClass(r.status) +
+            '">' +
+            String(r.status || "pending").toUpperCase() +
+            "</span>" +
+            '<div class="admin-rev-actions">' +
+            '<button type="button" data-status="' +
+            r.id +
+            '" data-next="approved">Approve</button>' +
+            '<button type="button" data-status="' +
+            r.id +
+            '" data-next="rejected">Reject</button>' +
+            '<button type="button" data-delete="' +
+            r.id +
+            '">🗑</button>' +
+            "</div></div></article>"
+        )
+        .join("");
+
+      root.querySelectorAll("[data-status]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-status");
+          const next = btn.getAttribute("data-next");
+          if (!id || !next) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/reviews/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ status: next }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update review.", "error");
+            return;
+          }
+          const row = state.all.find((x) => x.id === id);
+          if (row) row.status = next;
+          render();
+          if (window.showToast) window.showToast("Review updated.", "success");
+        });
+      });
+
+      root.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-delete");
+          if (!id || !window.confirm("Delete this review?")) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/reviews/" + encodeURIComponent(id), {
+            method: "DELETE",
+            headers: { ...h },
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not delete review.", "error");
+            return;
+          }
+          state.all = state.all.filter((x) => x.id !== id);
+          render();
+          if (window.showToast) window.showToast("Review deleted.", "success");
+        });
+      });
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      allBtn.classList.toggle("btn-primary", mode === "all");
+      allBtn.classList.toggle("btn-outline", mode !== "all");
+      render();
+    }
+
+    allBtn.addEventListener("click", () => setMode("all"));
+    reportBtn.addEventListener("click", () => {
+      const counts = state.all.reduce(
+        (acc, r) => {
+          const s = String(r.status || "pending");
+          acc[s] = (acc[s] || 0) + 1;
+          return acc;
+        },
+        {}
+      );
+      const msg =
+        "Approved: " +
+        (counts.approved || 0) +
+        ", Pending: " +
+        (counts.pending || 0) +
+        ", Escalated: " +
+        (counts.escalated || 0) +
+        ", Rejected: " +
+        (counts.rejected || 0);
+      if (window.showToast) window.showToast(msg, "success");
+    });
+
+    const h = await window.getBearerHeaders();
+    const res = await fetch("/api/admin/reviews", { headers: { ...h } });
+    if (res.status === 401 || res.status === 403) {
+      document.querySelector(".admin-lux-content").innerHTML =
+        "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+      return;
+    }
+    const data = await res.json();
+    state.all = data.reviews || [];
+    render();
+  })();
+</script>
+{% endblock %}

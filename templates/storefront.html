@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ country_config[country].label }} - ME Luxury Kids{% endblock %}
+{% block content %}
+<section class="store-header">
+  <h1>{{ country_config[country].label }} Store</h1>
+  <p>Royal Collection and ME Street with curated premium products.</p>
+</section>
+<section class="product-grid">
+  {% for product in products %}
+    <article class="card">
+      <img src="{{ product['image_url'] }}" alt="{{ product['name'] }}" loading="lazy" />
+      <div class="card-body">
+        <p class="collection">{{ product['collection'] }}</p>
+        <h3>{{ product['name'] }}</h3>
+        <p>{{ country_config[country].symbol }}{{ product['price_inr'] if country == 'in' else product['price_usd'] }}</p>
+        <div class="card-actions">
+          <a class="btn btn-outline" href="{{ url_for('product_detail', country=country, product_id=product['id']) }}">View</a>
+          <form method="post" action="{{ url_for('add_to_cart', product_id=product['id']) }}">
+            <button class="btn btn-gold">Add</button>
+          </form>
+        </div>
+      </div>
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}

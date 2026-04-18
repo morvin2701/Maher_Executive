@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Admin — {% block admin_title %}{% endblock %}{% endblock %}
+{% block content %}
+<div class="admin-lux-shell">
+  <aside class="admin-lux-side">
+    <div class="admin-lux-brand">
+      <p>Maher Executive</p>
+      <span>Console</span>
+    </div>
+    <nav class="admin-lux-nav">
+      <a class="{% if request.path == '/admin' %}active{% endif %}" href="/admin">Dashboard</a>
+      <a class="{% if request.path.startswith('/admin/products') %}active{% endif %}" href="/admin/products">Products</a>
+      <a class="{% if request.path.startswith('/admin/categories') %}active{% endif %}" href="/admin/categories">Categories</a>
+      <a class="{% if request.path.startswith('/admin/inventory') %}active{% endif %}" href="/admin/inventory">Inventory</a>
+      <a class="{% if request.path.startswith('/admin/orders') %}active{% endif %}" href="/admin/orders">Orders</a>
+      <a class="{% if request.path.startswith('/admin/returns') %}active{% endif %}" href="/admin/returns">Returns</a>
+      <a class="{% if request.path.startswith('/admin/customers') %}active{% endif %}" href="/admin/customers">Customers</a>
+      <a class="{% if request.path.startswith('/admin/coupons') %}active{% endif %}" href="/admin/coupons">Coupons</a>
+      <a class="{% if request.path.startswith('/admin/banners') %}active{% endif %}" href="/admin/banners">Banners</a>
+      <a class="{% if request.path.startswith('/admin/reviews') %}active{% endif %}" href="/admin/reviews">Reviews</a>
+      <a class="{% if request.path.startswith('/admin/notifications') %}active{% endif %}" href="/admin/notifications">Notifications</a>
+      <a class="{% if request.path.startswith('/admin/payments') %}active{% endif %}" href="/admin/payments">Payments</a>
+      <a class="{% if request.path.startswith('/admin/staff') %}active{% endif %}" href="/admin/staff">Staff</a>
+      <a class="{% if request.path.startswith('/admin/settings') %}active{% endif %}" href="/admin/settings">Settings</a>
+    </nav>
+    <a class="admin-lux-logout" href="/">Logout Session</a>
+  </aside>
+  <div class="admin-lux-main">
+    <header class="admin-lux-topbar">
+      <p>Management Suite</p>
+      <div>
+        <small>Super Admin</small>
+        <strong>Maher Executive</strong>
+      </div>
+    </header>
+    <div class="admin-lux-content">
+      {% block admin_content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}

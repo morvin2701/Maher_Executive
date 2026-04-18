@@ -1,0 +1,530 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{% if product_id %}Edit Masterpiece{% else %}New Masterpiece{% endif %}{% endblock %}
+{% block admin_content %}
+<section class="admin-product-studio" id="product-studio">
+  <header class="admin-studio-head">
+    <a href="/admin/products" class="admin-studio-back" aria-label="Back to products">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+    </a>
+    <div class="admin-studio-head-copy">
+      <h1 class="admin-studio-title">{% if product_id %}Edit Masterpiece{% else %}New Masterpiece{% endif %}</h1>
+      <p class="admin-studio-subtitle">
+        {% if product_id %}Refine this registry entry before it returns to the storefront.{% else %}{{ page_content.subtitle }}{% endif %}
+      </p>
+    </div>
+    <div class="admin-studio-actions">
+      <button type="button" class="btn btn-outline btn-sm admin-studio-btn-draft" id="btn-draft">Save as Draft</button>
+      <button type="button" class="btn btn-primary btn-sm admin-studio-btn-publish" id="btn-publish">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+        Publish to Store
+      </button>
+    </div>
+  </header>
+
+  <div class="admin-studio-shell">
+    <nav class="admin-studio-nav" aria-label="Product sections">
+      <button type="button" class="admin-studio-tab is-active" data-step="general" aria-selected="true">
+        <span class="admin-studio-tab-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 10v5M12 8h.01"/></svg>
+        </span>
+        <span class="admin-studio-tab-label">General Info</span>
+        <span class="admin-studio-tab-chev" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="admin-studio-tab" data-step="media" aria-selected="false">
+        <span class="admin-studio-tab-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 17l-6-6-4 4-2-2-4 4"/></svg>
+        </span>
+        <span class="admin-studio-tab-label">Media Assets</span>
+        <span class="admin-studio-tab-chev" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="admin-studio-tab" data-step="pricing" aria-selected="false">
+        <span class="admin-studio-tab-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        </span>
+        <span class="admin-studio-tab-label">Pricing &amp; Stock</span>
+        <span class="admin-studio-tab-chev" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="admin-studio-tab" data-step="attributes" aria-selected="false">
+        <span class="admin-studio-tab-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82zM7 7h.01"/></svg>
+        </span>
+        <span class="admin-studio-tab-label">Attributes</span>
+        <span class="admin-studio-tab-chev" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="admin-studio-tab" data-step="seo" aria-selected="false">
+        <span class="admin-studio-tab-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        </span>
+        <span class="admin-studio-tab-label">Search Optimization</span>
+        <span class="admin-studio-tab-chev" aria-hidden="true">›</span>
+      </button>
+    </nav>
+
+    <div class="admin-studio-panels">
+      <!-- General -->
+      <div class="admin-studio-panel is-active" data-panel="general" role="tabpanel">
+        <div class="admin-studio-card">
+          <h2 class="admin-studio-card-title">General Information</h2>
+          <p class="admin-studio-card-lede">Foundational catalog identity for this piece.</p>
+          <div class="admin-studio-field">
+            <label for="f-name">Product artistic name</label>
+            <input id="f-name" type="text" autocomplete="off" placeholder="e.g. Midnight Silk Gala Gown" />
+          </div>
+          <div class="admin-studio-row2">
+            <div class="admin-studio-field">
+              <label for="f-category">Category selection</label>
+              <select id="f-category"></select>
+            </div>
+            <div class="admin-studio-field">
+              <label for="f-collection">Collection identifier</label>
+              <input id="f-collection" type="text" placeholder="e.g. Winter 2026 Archival" autocomplete="off" />
+            </div>
+          </div>
+          <div class="admin-studio-field">
+            <label for="f-desc">Full narrative (description)</label>
+            <textarea id="f-desc" rows="6" placeholder="Describe the fabric, the cut, and the story behind this piece…"></textarea>
+          </div>
+          <input type="hidden" id="f-slug" />
+          <input type="hidden" id="f-brand" value="Maher Executive" />
+        </div>
+      </div>
+
+      <!-- Media -->
+      <div class="admin-studio-panel" data-panel="media" role="tabpanel" hidden>
+        <div class="admin-studio-card">
+          <h2 class="admin-studio-card-title">Visual Assets</h2>
+          <p class="admin-studio-card-lede admin-studio-card-lede--caps">High-resolution editorial imagery (minimum 2000px width recommended)</p>
+          <div class="admin-media-row">
+            <div id="media-grid" class="admin-media-grid"></div>
+            <button type="button" class="admin-media-upload-placeholder" id="btn-upload">
+              <span class="admin-media-upload-icon" aria-hidden="true">↑</span>
+              <span>Upload Asset</span>
+            </button>
+          </div>
+          <p class="muted admin-media-hint">First image is the storefront cover. Use “Cover” on a tile to promote another asset.</p>
+        </div>
+      </div>
+
+      <!-- Pricing -->
+      <div class="admin-studio-panel" data-panel="pricing" role="tabpanel" hidden>
+        <div class="admin-studio-card admin-studio-card--split-head">
+          <div class="admin-studio-split-top">
+            <h2 class="admin-studio-split-heading">Financials</h2>
+            <h2 class="admin-studio-split-heading">Availability</h2>
+          </div>
+          <div class="admin-studio-pricing-grid">
+            <div class="admin-studio-field">
+              <label for="f-price">Base acquisition price</label>
+              <div class="admin-studio-input-money">
+                <span>₹</span>
+                <input id="f-price" type="number" step="0.01" min="0" placeholder="0.00" />
+              </div>
+            </div>
+            <div class="admin-studio-field">
+              <label for="f-sku">Unique identity (SKU)</label>
+              <input id="f-sku" type="text" placeholder="AU-2026-SKU-001" autocomplete="off" />
+            </div>
+            <div class="admin-studio-field">
+              <label for="f-compare">Restricted sale price <span class="admin-studio-opt">(optional)</span></label>
+              <div class="admin-studio-input-money">
+                <span>₹</span>
+                <input id="f-compare" type="number" step="0.01" min="0" placeholder="0.00" />
+              </div>
+            </div>
+            <div class="admin-studio-field">
+              <label for="f-stock-total">Total registered units</label>
+              <input id="f-stock-total" type="number" min="0" step="1" placeholder="0" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Attributes -->
+      <div class="admin-studio-panel" data-panel="attributes" role="tabpanel" hidden>
+        <div class="admin-studio-card">
+          <h2 class="admin-studio-card-title">Curation Attributes</h2>
+          <p class="admin-studio-card-lede">Sizing, palette, and material composition.</p>
+          <div class="admin-studio-field">
+            <label>Sizing variations</label>
+            <div class="admin-size-chips" id="size-chips" aria-label="Sizes">
+              <button type="button" class="admin-size-chip" data-size="XS">XS</button>
+              <button type="button" class="admin-size-chip" data-size="S">S</button>
+              <button type="button" class="admin-size-chip" data-size="M">M</button>
+              <button type="button" class="admin-size-chip" data-size="L">L</button>
+              <button type="button" class="admin-size-chip" data-size="XL">XL</button>
+              <button type="button" class="admin-size-chip" data-size="XXL">XXL</button>
+              <button type="button" class="admin-size-chip admin-size-chip--wide" data-size="ONE SIZE">ONE SIZE</button>
+            </div>
+          </div>
+          <div class="admin-studio-field">
+            <label for="f-colorway">Palette / colorway</label>
+            <input id="f-colorway" type="text" placeholder="e.g. Obsidian Black, Ivory Silk" autocomplete="off" />
+          </div>
+          <div class="admin-studio-field">
+            <label for="f-composition">Composition (materials)</label>
+            <input id="f-composition" type="text" placeholder="e.g. 100% Mulberry Silk, Lambskin Lining" autocomplete="off" />
+          </div>
+        </div>
+      </div>
+
+      <!-- SEO -->
+      <div class="admin-studio-panel" data-panel="seo" role="tabpanel" hidden>
+        <div class="admin-studio-card">
+          <h2 class="admin-studio-card-title">Indexing Optimization</h2>
+          <p class="admin-studio-card-lede">Search and sharing metadata for organic discovery.</p>
+          <div class="admin-studio-field">
+            <label for="f-meta-title">Meta title</label>
+            <input id="f-meta-title" type="text" placeholder="Concise title for search results" autocomplete="off" />
+          </div>
+          <div class="admin-studio-field">
+            <label for="f-meta-desc">Meta description</label>
+            <textarea id="f-meta-desc" rows="5" placeholder="One to two sentences summarizing this piece…"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="https://upload-widget.cloudinary.com/global/all.js"></script>
+<script>
+  const productId = {{ (product_id or '') | tojson }};
+  let imageList = [];
+  let slugTouched = false;
+
+  async function bearerHeaders() {
+    if (typeof window.getBearerHeaders === "function") {
+      return (await window.getBearerHeaders()) || {};
+    }
+    const t = localStorage.getItem("idToken");
+    return t ? { Authorization: "Bearer " + t } : {};
+  }
+
+  function slugify(s) {
+    return String(s || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function defaultSku() {
+    const y = new Date().getFullYear();
+    const r = Math.random().toString(16).slice(2, 6).toUpperCase();
+    return "AU-" + y + "-SKU-" + r;
+  }
+
+  function normalizeSizeLabel(raw) {
+    const t = String(raw || "").trim();
+    if (/^one\s*-?\s*size$/i.test(t)) return "ONE SIZE";
+    return t.toUpperCase();
+  }
+
+  function buildVariants(selectedSizes, totalStock, skuBase, colorway) {
+    const color =
+      String(colorway || "")
+        .split(",")[0]
+        .trim() || "";
+    const sizes =
+      selectedSizes.length > 0 ? selectedSizes.slice() : ["ONE SIZE"];
+    const n = sizes.length;
+    const stockNum = Math.max(0, parseInt(String(totalStock || 0), 10) || 0);
+    const base = Math.floor(stockNum / n);
+    let remainder = stockNum - base * n;
+    return sizes.map(function (size, idx) {
+      const extra = idx < remainder ? 1 : 0;
+      const stock = base + extra;
+      const suf = String(size).replace(/\s+/g, "");
+      return {
+        size: size,
+        stock: stock,
+        sku: skuBase ? skuBase + "-" + suf : "",
+        color: color,
+      };
+    });
+  }
+
+  function setActiveStep(step) {
+    document.querySelectorAll(".admin-studio-tab").forEach(function (btn) {
+      const on = btn.getAttribute("data-step") === step;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    document.querySelectorAll(".admin-studio-panel").forEach(function (panel) {
+      const on = panel.getAttribute("data-panel") === step;
+      panel.classList.toggle("is-active", on);
+      panel.hidden = !on;
+    });
+  }
+
+  document.querySelectorAll(".admin-studio-tab").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      setActiveStep(btn.getAttribute("data-step"));
+    });
+  });
+
+  document.getElementById("f-name").addEventListener("input", function () {
+    if (!slugTouched) {
+      document.getElementById("f-slug").value = slugify(document.getElementById("f-name").value);
+    }
+  });
+  document.getElementById("f-name").addEventListener("blur", function () {
+    if (!document.getElementById("f-slug").value) {
+      document.getElementById("f-slug").value = slugify(document.getElementById("f-name").value);
+    }
+  });
+
+  function getSelectedSizes() {
+    const out = [];
+    document.querySelectorAll(".admin-size-chip.is-selected").forEach(function (btn) {
+      out.push(btn.getAttribute("data-size"));
+    });
+    return out;
+  }
+
+  document.querySelectorAll(".admin-size-chip").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const sz = btn.getAttribute("data-size");
+      if (sz === "ONE SIZE") {
+        document.querySelectorAll(".admin-size-chip").forEach(function (b) {
+          if (b.getAttribute("data-size") !== "ONE SIZE") b.classList.remove("is-selected");
+        });
+        btn.classList.toggle("is-selected");
+        return;
+      }
+      document.querySelector('.admin-size-chip[data-size="ONE SIZE"]').classList.remove("is-selected");
+      btn.classList.toggle("is-selected");
+    });
+  });
+
+  function renderMediaGrid() {
+    const host = document.getElementById("media-grid");
+    if (!host) return;
+    host.innerHTML = "";
+    imageList.forEach(function (img, idx) {
+      const tile = document.createElement("div");
+      tile.className = "admin-media-tile";
+      const isCover = idx === 0;
+      tile.innerHTML =
+        '<img src="' +
+        (img.url || "").replace(/"/g, "&quot;") +
+        '" alt="' +
+        String(img.alt || "").replace(/"/g, "&quot;") +
+        '" />' +
+        '<button type="button" class="admin-media-remove" data-idx="' +
+        idx +
+        '" aria-label="Remove image">×</button>' +
+        (isCover
+          ? '<span class="admin-media-cover-badge">Cover</span>'
+          : '<button type="button" class="admin-media-cover-btn" data-idx="' +
+            idx +
+            '">Make cover</button>');
+      host.appendChild(tile);
+    });
+    host.querySelectorAll(".admin-media-remove").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const i = parseInt(btn.getAttribute("data-idx"), 10);
+        imageList.splice(i, 1);
+        renderMediaGrid();
+      });
+    });
+    host.querySelectorAll(".admin-media-cover-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const i = parseInt(btn.getAttribute("data-idx"), 10);
+        const item = imageList.splice(i, 1)[0];
+        imageList.unshift(item);
+        renderMediaGrid();
+      });
+    });
+  }
+
+  function openUploadWidget() {
+    const c = window.__CLOUDINARY__ || {};
+    if (!window.cloudinary || !c.cloudName) {
+      alert("Cloudinary is not configured. Add credentials to enable uploads.");
+      return;
+    }
+    const widget = cloudinary.createUploadWidget(
+      {
+        cloudName: c.cloudName,
+        uploadPreset: c.uploadPreset,
+        folder: c.folder,
+        sources: ["local", "url"],
+      },
+      function (err, result) {
+        if (!result || result.event !== "success") return;
+        imageList.push({ url: result.info.secure_url, alt: String(result.info.original_filename || "") });
+        renderMediaGrid();
+      }
+    );
+    widget.open();
+  }
+
+  document.getElementById("btn-upload").addEventListener("click", openUploadWidget);
+
+  function collectPayload(publish) {
+    const skuBase = document.getElementById("f-sku").value.trim();
+    const sizes = getSelectedSizes();
+    const totalStock = document.getElementById("f-stock-total").value;
+    const colorway = document.getElementById("f-colorway").value.trim();
+    return {
+      name: document.getElementById("f-name").value.trim(),
+      slug: document.getElementById("f-slug").value.trim() || slugify(document.getElementById("f-name").value),
+      brand: document.getElementById("f-brand").value.trim() || "Maher Executive",
+      category: document.getElementById("f-category").value.trim(),
+      subcategory: document.getElementById("f-collection").value.trim(),
+      description: document.getElementById("f-desc").value.trim(),
+      price: parseFloat(document.getElementById("f-price").value || "0"),
+      comparePrice: parseFloat(document.getElementById("f-compare").value || "0"),
+      sku: skuBase,
+      images: imageList.slice(),
+      variants: buildVariants(sizes, totalStock, skuBase, colorway),
+      metaTitle: document.getElementById("f-meta-title").value.trim(),
+      metaDescription: document.getElementById("f-meta-desc").value.trim(),
+      composition: document.getElementById("f-composition").value.trim(),
+      colorway: colorway,
+      isPublished: !!publish,
+      isNew: true,
+    };
+  }
+
+  function validateForPublish(payload) {
+    if (!payload.name) return "Product name is required.";
+    if (!payload.slug) return "Slug is required.";
+    if (!payload.description) return "Description is required.";
+    if (!(payload.price >= 0) || payload.price <= 0) return "Enter a valid base price greater than zero.";
+    if (!payload.images.length) return "Add at least one image before publishing.";
+    return null;
+  }
+
+  async function saveProduct(publish) {
+    const h = await bearerHeaders();
+    if (!h.Authorization) {
+      alert("Sign in as admin first (Firebase Auth).");
+      window.location.href = "/auth";
+      return;
+    }
+    const payload = collectPayload(publish);
+    if (publish) {
+      const err = validateForPublish(payload);
+      if (err) {
+        alert(err);
+        return;
+      }
+    } else {
+      if (!payload.name && !payload.slug) {
+        alert("Enter at least a product name or slug to save a draft.");
+        return;
+      }
+      if (!payload.slug) payload.slug = slugify(payload.name) || "draft-" + Date.now().toString(36);
+      if (!payload.description) payload.description = "Draft — description pending.";
+    }
+
+    let res;
+    if (productId) {
+      res = await fetch("/api/admin/products/" + encodeURIComponent(productId), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...h },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      res = await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...h },
+        body: JSON.stringify(payload),
+      });
+    }
+    if (res.ok) {
+      window.location.href = "/admin/products";
+      return;
+    }
+    const e = await res.json().catch(function () {
+      return {};
+    });
+    alert(e.error || "Save failed — ensure admin role in Firestore.");
+  }
+
+  document.getElementById("btn-draft").addEventListener("click", function () {
+    saveProduct(false);
+  });
+  document.getElementById("btn-publish").addEventListener("click", function () {
+    saveProduct(true);
+  });
+
+  async function loadCategories() {
+    const sel = document.getElementById("f-category");
+    try {
+      const h = await bearerHeaders();
+      const res = await fetch("/api/admin/categories", { headers: { ...h } });
+      const data = await res.json();
+      const cats = data.categories || [];
+      sel.innerHTML =
+        '<option value="">Select category…</option>' +
+        cats
+          .map(function (c) {
+            return '<option value="' + String(c.slug || "").replace(/"/g, "&quot;") + '">' + String(c.name || c.slug || "").replace(/</g, "&lt;") + "</option>";
+          })
+          .join("");
+    } catch (e) {
+      sel.innerHTML =
+        '<option value="">women</option><option value="men">men</option><option value="accessories">accessories</option>';
+    }
+  }
+
+  async function loadExisting() {
+    if (!productId) {
+      document.getElementById("f-sku").value = defaultSku();
+      return;
+    }
+    const h = await bearerHeaders();
+    const res = await fetch("/api/admin/products", { headers: { ...h } });
+    const data = await res.json();
+    const p = (data.products || []).find(function (x) {
+      return x.id === productId;
+    });
+    if (!p) return;
+
+    document.getElementById("f-name").value = p.name || "";
+    document.getElementById("f-slug").value = p.slug || "";
+    slugTouched = true;
+    document.getElementById("f-brand").value = p.brand || "Maher Executive";
+    document.getElementById("f-category").value = p.category || "";
+    document.getElementById("f-collection").value = p.subcategory || "";
+    document.getElementById("f-desc").value = p.description || "";
+    document.getElementById("f-price").value = p.price != null ? p.price : "";
+    document.getElementById("f-compare").value = p.comparePrice != null ? p.comparePrice : "";
+    document.getElementById("f-sku").value = p.sku || defaultSku();
+    document.getElementById("f-meta-title").value = p.metaTitle || "";
+    document.getElementById("f-meta-desc").value = p.metaDescription || "";
+    document.getElementById("f-composition").value = p.composition || "";
+    document.getElementById("f-colorway").value = p.colorway || "";
+
+    const variants = Array.isArray(p.variants) ? p.variants : [];
+    let total = 0;
+    const picked = new Set();
+    variants.forEach(function (v) {
+      total += Number(v.stock || 0);
+      const nl = normalizeSizeLabel(v.size);
+      if (nl) picked.add(nl);
+    });
+    document.getElementById("f-stock-total").value = total || "";
+
+    document.querySelectorAll(".admin-size-chip").forEach(function (btn) {
+      const ds = btn.getAttribute("data-size");
+      btn.classList.toggle("is-selected", picked.has(ds));
+    });
+
+    imageList = Array.isArray(p.images) ? p.images.slice() : [];
+    renderMediaGrid();
+  }
+
+  (async function boot() {
+    await loadCategories();
+    await loadExisting();
+    renderMediaGrid();
+  })();
+</script>
+{% endblock %}

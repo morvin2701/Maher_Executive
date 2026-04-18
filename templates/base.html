@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Maher Executive — Luxury{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <header class="nav-glass">
+    <nav class="nav-links nav-left">
+      <a href="/">Home</a>
+      <a href="/women">Women</a>
+      <a href="/men">Men</a>
+      <a href="/about">About</a>
+      <a href="/admin" id="nav-admin" style="display:none;">Admin</a>
+    </nav>
+
+    <a class="logo nav-brand-center" href="/">Maher <span>Executive</span></a>
+
+    <div class="nav-actions nav-right">
+      <a href="/search" class="icon-link nav-icon" aria-label="Search" title="Search">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+        </svg>
+      </a>
+      <a href="/account/profile" class="icon-link nav-icon" aria-label="Account" id="nav-auth" title="Account">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path>
+        </svg>
+      </a>
+      <a href="/wishlist" class="icon-link nav-icon" aria-label="Wishlist" title="Wishlist">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20.8 8.6a5.2 5.2 0 0 0-8.8-3.8A5.2 5.2 0 0 0 3.2 8.6c0 6 8.8 11.4 8.8 11.4s8.8-5.4 8.8-11.4z"></path>
+        </svg>
+      </a>
+      <a href="/cart" class="icon-link nav-icon" aria-label="Cart" title="Cart">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 7h12l-1.1 11H7.1L6 7z"></path>
+          <path d="M9 7a3 3 0 0 1 6 0"></path>
+        </svg>
+      </a>
+    </div>
+    <button class="nav-burger" type="button" aria-label="Menu" id="nav-burger">☰</button>
+  </header>
+
+  <main class="main-content">{% block content %}{% endblock %}</main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script>
+    window.__FIREBASE_WEB__ = {{ firebase_web | tojson }};
+    window.__CLOUDINARY__ = {{ cloudinary_client | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='js/firebase-app.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

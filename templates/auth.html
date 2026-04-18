@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Sign in — ME Clothing{% endblock %}
+{% block content %}
+<section class="auth-layout">
+  <div class="auth-panel auth-panel-brand">
+    <p class="badge">MAHER EXCLUSIVE</p>
+    <h1>Luxury wardrobe access</h1>
+    <p>Sign in to manage wishlist, addresses, orders, and premium early drops.</p>
+    <ul>
+      <li>Real-time order updates</li>
+      <li>Fast checkout with saved details</li>
+      <li>Editorial picks and private offers</li>
+    </ul>
+  </div>
+
+  <div class="auth-panel auth-panel-form">
+    <div class="auth-switch" role="tablist">
+      <button id="tab-login" class="active" type="button" role="tab">Sign In</button>
+      <button id="tab-signup" type="button" role="tab">Sign Up</button>
+    </div>
+    <p class="muted">Use email/password or Google.</p>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="ae" autocomplete="email" placeholder="you@example.com" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="ap" autocomplete="current-password" placeholder="••••••••" />
+    </div>
+    <div class="field" id="confirm-wrap" style="display:none;">
+      <label>Confirm Password</label>
+      <input type="password" id="ap2" autocomplete="new-password" placeholder="••••••••" />
+    </div>
+    <button type="button" class="btn btn-primary" id="btn-submit" style="width:100%;">Sign in</button>
+    <button type="button" class="btn btn-outline" id="btn-google" style="width:100%;margin-top:0.6rem;">Continue with Google</button>
+    <p id="auth-hint" class="muted auth-hint"></p>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  const state = { mode: "login" };
+  const el = {
+    tabLogin: document.getElementById("tab-login"),
+    tabSignup: document.getElementById("tab-signup"),
+    email: document.getElementById("ae"),
+    pass: document.getElementById("ap"),
+    pass2: document.getElementById("ap2"),
+    confirmWrap: document.getElementById("confirm-wrap"),
+    submit: document.getElementById("btn-submit"),
+    google: document.getElementById("btn-google"),
+    hint: document.getElementById("auth-hint"),
+  };
+
+  function setMode(mode) {
+    state.mode = mode;
+    const isSignup = mode === "signup";
+    el.tabLogin.classList.toggle("active", !isSignup);
+    el.tabSignup.classList.toggle("active", isSignup);
+    el.confirmWrap.style.display = isSignup ? "block" : "none";
+    el.submit.textContent = isSignup ? "Create account" : "Sign in";
+    el.hint.textContent = isSignup
+      ? "Use at least 6 characters for password."
+      : "Use your registered account credentials.";
+  }
+
+  async function redirectAfterAuth(user) {
+    if (!user) {
+      window.location.href = "/";
+      return;
+    }
+    try {
+      const idToken = await user.getIdToken(true);
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data && data.role === "admin") {
+        window.location.href = "/admin";
+        return;
+      }
+      window.location.href = "/";
+    } catch (_e) {
+      window.location.href = "/";
+    }
+  }
+
+  async function doAuthAction() {
+    const email = el.email.value.trim();
+    const password = el.pass.value;
+    const confirm = el.pass2.value;
+    if (!window.firebaseAuth) {
+      showToast("Firebase config missing. Check .env and restart server.", "error");
+      return;
+    }
+    if (!email || !password) {
+      showToast("Email and password are required.", "warning");
+      return;
+    }
+    if (state.mode === "signup" && password !== confirm) {
+      showToast("Passwords do not match.", "warning");
+      return;
+    }
+    el.submit.disabled = true;
+    const initialText = el.submit.textContent;
+    el.submit.textContent = "Please wait...";
+    try {
+      let cred;
+      if (state.mode === "signup") {
+        cred = await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
+        showToast("Account created successfully.", "success");
+      } else {
+        cred = await window.firebaseAuth.signInWithEmailAndPassword(email, password);
+        showToast("Signed in successfully.", "success");
+      }
+      await redirectAfterAuth(cred && cred.user);
+    } catch (e) {
+      const msg = String(e && e.message ? e.message : "Authentication failed");
+      showToast(msg, "error");
+    } finally {
+      el.submit.disabled = false;
+      el.submit.textContent = initialText;
+    }
+  }
+
+  async function googleSignIn() {
+    if (!window.firebaseAuth) {
+      showToast("Firebase config missing.", "error");
+      return;
+    }
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      const result = await window.firebaseAuth.signInWithPopup(provider);
+      showToast("Signed in with Google.", "success");
+      await redirectAfterAuth(result && result.user);
+    } catch (e) {
+      const msg = String(e && e.message ? e.message : "");
+      const code = e && e.code ? String(e.code) : "";
+      if (
+        code === "auth/popup-blocked" ||
+        code === "auth/popup-closed-by-user" ||
+        code === "auth/cancelled-popup-request"
+      ) {
+        showToast("Popup blocked/closed. Redirecting to Google sign-in...", "warning");
+        try {
+          await window.firebaseAuth.signInWithRedirect(provider);
+        } catch (redirectErr) {
+          showToast(
+            (redirectErr && redirectErr.message) || "Google redirect sign-in failed",
+            "error"
+          );
+        }
+      } else if (code === "auth/unauthorized-domain" || msg.includes("auth/unauthorized-domain")) {
+        showToast(
+          "Google login blocked: add localhost and 127.0.0.1 in Firebase Auth authorized domains.",
+          "error"
+        );
+      } else if (code === "auth/operation-not-allowed" || msg.includes("auth/operation-not-allowed")) {
+        showToast("Enable Google provider in Firebase Authentication > Sign-in method.", "error");
+      } else if (code === "auth/configuration-not-found") {
+        showToast(
+          "Google auth configuration missing. Verify OAuth consent and provider setup in Firebase.",
+          "error"
+        );
+      } else if (code === "auth/network-request-failed") {
+        showToast("Network error while contacting Google. Check internet/VPN/ad-blocker.", "error");
+      } else {
+        showToast(msg || "Google sign-in failed", "error");
+      }
+    }
+  }
+
+  el.tabLogin.onclick = () => setMode("login");
+  el.tabSignup.onclick = () => setMode("signup");
+  el.submit.onclick = doAuthAction;
+  el.google.onclick = googleSignIn;
+  setMode("login");
+
+  // Handle redirect-based Google sign-in completion.
+  if (window.firebaseAuth && window.firebaseAuth.getRedirectResult) {
+    window.firebaseAuth
+      .getRedirectResult()
+      .then((result) => {
+        if (result && result.user) {
+          showToast("Signed in with Google.", "success");
+          redirectAfterAuth(result.user);
+        }
+      })
+      .catch((err) => {
+        if (err && err.code) {
+          showToast(String(err.message || err.code), "error");
+        }
+      });
+  }
+</script>
+{% endblock %}

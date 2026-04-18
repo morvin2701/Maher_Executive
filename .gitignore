@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Environment & secrets (never commit)
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Firebase / GCP credentials — keep outside repo or only on your machine
+*-firebase-adminsdk-*.json
+firebase-adminsdk*.json
+serviceAccount*.json
+*credentials*.json
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local databases
+*.db
+*.sqlite3
+
+# Logs & temp
+*.log
+tmp/
+temp/
+
+# JS (if present at repo root)
+node_modules/
+
+# Coverage / test caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Flask
+instance/
+.webassets-cache

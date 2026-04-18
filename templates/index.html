@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}ME Luxury Kids - Select Country{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="kicker">Maher Exclusive</p>
+  <h1>Luxury Kidswear for India and USA</h1>
+  <p>Black, white, and gold luxury storefront with country-specific pricing, payments, and shipping.</p>
+  <div class="country-actions">
+    <form method="post" action="{{ url_for('set_country') }}">
+      <input type="hidden" name="country" value="in" />
+      <button class="btn btn-gold">India Store</button>
+    </form>
+    <form method="post" action="{{ url_for('set_country') }}">
+      <input type="hidden" name="country" value="us" />
+      <button class="btn btn-outline">USA Store</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

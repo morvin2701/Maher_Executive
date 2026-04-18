@@ -1,0 +1,256 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-product-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>Product Inventory</h1>
+    <p class="muted">Manage your luxury catalog and availability.</p>
+  </div>
+  <a class="btn btn-primary btn-sm" href="/admin/products/new">+ Add New Masterpiece</a>
+</section>
+
+<section class="admin-product-tools">
+  <label class="admin-product-search">
+    <span>⌕</span>
+    <input id="product-search" placeholder="Search by name, SKU or brand..." />
+  </label>
+  <div class="admin-product-actions">
+    <button class="btn btn-outline btn-sm" id="product-filter">Filter: All</button>
+    <button class="btn btn-outline btn-sm" id="product-export">Export CSV</button>
+  </div>
+</section>
+
+<section class="admin-product-panel">
+  <div class="admin-product-table-wrap">
+    <table class="admin-product-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Category</th>
+          <th>Pricing</th>
+          <th>Inventory</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="product-table-body">
+        <tr><td colspan="5" class="muted">Loading products...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="admin-product-foot">
+    <p id="product-range" class="muted"></p>
+    <div class="admin-product-pages">
+      <button type="button" id="page-prev">1</button>
+      <button type="button" id="page-next">2</button>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = {
+      all: [],
+      shown: [],
+      page: 1,
+      pageSize: 8,
+      stockFilter: "all", // all | in | low | out
+      query: "",
+    };
+
+    const els = {
+      body: document.getElementById("product-table-body"),
+      range: document.getElementById("product-range"),
+      prev: document.getElementById("page-prev"),
+      next: document.getElementById("page-next"),
+      search: document.getElementById("product-search"),
+      filter: document.getElementById("product-filter"),
+      exportBtn: document.getElementById("product-export"),
+    };
+
+    function money(v) {
+      return "₹" + Number(v || 0).toLocaleString("en-IN");
+    }
+
+    function calcStock(product) {
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+      if (!variants.length) return 0;
+      return variants.reduce((acc, v) => acc + Number(v.stock || 0), 0);
+    }
+
+    function stockState(units) {
+      if (units <= 0) return "out";
+      if (units <= 5) return "low";
+      return "in";
+    }
+
+    function statusLabel(units) {
+      const st = stockState(units);
+      if (st === "out") return "Out of Stock";
+      if (st === "low") return "Low Stock";
+      return "In Stock";
+    }
+
+    function statusWidth(units) {
+      if (units <= 0) return 6;
+      if (units <= 5) return 34;
+      if (units <= 12) return 58;
+      return 85;
+    }
+
+    function applyFilters() {
+      const q = state.query.trim().toLowerCase();
+      state.shown = state.all.filter((p) => {
+        const units = calcStock(p);
+        const st = stockState(units);
+        const stockMatch = state.stockFilter === "all" ? true : st === state.stockFilter;
+        if (!stockMatch) return false;
+        if (!q) return true;
+        const text = [p.name, p.slug, p.brand, p.category, p.subcategory].filter(Boolean).join(" ").toLowerCase();
+        return text.includes(q);
+      });
+      const totalPages = Math.max(1, Math.ceil(state.shown.length / state.pageSize));
+      if (state.page > totalPages) state.page = totalPages;
+      renderTable();
+    }
+
+    function renderTable() {
+      const start = (state.page - 1) * state.pageSize;
+      const rows = state.shown.slice(start, start + state.pageSize);
+      if (!rows.length) {
+        els.body.innerHTML = '<tr><td colspan="5" class="muted">No products match this filter.</td></tr>';
+      } else {
+        els.body.innerHTML = rows
+          .map((p) => {
+            const img = (p.images && p.images[0] && p.images[0].url) || "";
+            const units = calcStock(p);
+            const st = stockState(units);
+            return (
+              "<tr>" +
+              '<td><div class="admin-prod-cell">' +
+              (img ? '<img src="' + img + '" alt="' + (p.name || "") + '" loading="lazy" />' : "") +
+              '<div><h4>' + (p.name || "Untitled") + "</h4>" +
+              "<p>" + (p.id || "").slice(0, 10).toUpperCase() + "</p></div></div></td>" +
+              "<td>" + ((p.category || "ready-to-wear").replaceAll("-", " ").toUpperCase()) + "</td>" +
+              "<td><strong>" + money(p.price) + "</strong>" +
+              (p.comparePrice ? '<span class="admin-sale-price">Sale ' + money(p.comparePrice) + "</span>" : "") +
+              "</td>" +
+              '<td><div class="admin-stock-wrap"><span class="admin-stock-label ' + st + '">' + statusLabel(units) + '</span>' +
+              '<div class="admin-stock-meter"><i class="' + st + '" style="width:' + statusWidth(units) + '%;"></i></div>' +
+              '<small>' + units + " units</small></div></td>" +
+              '<td><div class="admin-prod-actions">' +
+              '<a href="/admin/products/' + p.id + '/edit">Edit</a>' +
+              '<button type="button" data-toggle="' + p.id + '">' + (p.isPublished ? "Unpublish" : "Publish") + "</button>" +
+              '<button type="button" data-delete="' + p.id + '">Delete</button>' +
+              "</div></td>" +
+              "</tr>"
+            );
+          })
+          .join("");
+      }
+
+      const end = Math.min(start + state.pageSize, state.shown.length);
+      els.range.textContent = "Displaying luxury masterpieces " + (state.shown.length ? (start + 1) : 0) + " - " + end + " of " + state.shown.length;
+      const totalPages = Math.max(1, Math.ceil(state.shown.length / state.pageSize));
+      els.prev.disabled = state.page <= 1;
+      els.next.disabled = state.page >= totalPages;
+      els.prev.textContent = String(Math.max(1, state.page - 1));
+      els.next.textContent = String(Math.min(totalPages, state.page + 1));
+
+      els.body.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-delete");
+          if (!id || !window.confirm("Delete this product?")) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/products/" + encodeURIComponent(id), { method: "DELETE", headers: { ...h } });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not delete product.", "error");
+            return;
+          }
+          state.all = state.all.filter((x) => x.id !== id);
+          applyFilters();
+          if (window.showToast) window.showToast("Product deleted.", "success");
+        });
+      });
+
+      els.body.querySelectorAll("[data-toggle]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-toggle");
+          const row = state.all.find((x) => x.id === id);
+          if (!id || !row) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/products/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ isPublished: !row.isPublished }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update publish state.", "error");
+            return;
+          }
+          row.isPublished = !row.isPublished;
+          renderTable();
+          if (window.showToast) window.showToast(row.isPublished ? "Product published." : "Product unpublished.", "success");
+        });
+      });
+    }
+
+    els.search.addEventListener("input", () => {
+      state.query = els.search.value || "";
+      state.page = 1;
+      applyFilters();
+    });
+
+    els.filter.addEventListener("click", () => {
+      const order = ["all", "in", "low", "out"];
+      const labels = { all: "All", in: "In Stock", low: "Low Stock", out: "Out of Stock" };
+      const idx = order.indexOf(state.stockFilter);
+      state.stockFilter = order[(idx + 1) % order.length];
+      els.filter.textContent = "Filter: " + labels[state.stockFilter];
+      state.page = 1;
+      applyFilters();
+    });
+
+    els.prev.addEventListener("click", () => {
+      state.page = Math.max(1, state.page - 1);
+      renderTable();
+    });
+
+    els.next.addEventListener("click", () => {
+      const totalPages = Math.max(1, Math.ceil(state.shown.length / state.pageSize));
+      state.page = Math.min(totalPages, state.page + 1);
+      renderTable();
+    });
+
+    els.exportBtn.addEventListener("click", () => {
+      const header = ["id", "name", "category", "price", "stock_units", "published"];
+      const lines = state.shown.map((p) =>
+        [p.id, p.name, p.category, Number(p.price || 0), calcStock(p), !!p.isPublished]
+          .map((v) => '"' + String(v ?? "").replaceAll('"', '""') + '"')
+          .join(",")
+      );
+      const csv = [header.join(","), ...lines].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "inventory_export.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    const h = await window.getBearerHeaders();
+    const res = await fetch("/api/admin/products", { headers: { ...h } });
+    if (res.status === 401 || res.status === 403) {
+      document.querySelector(".admin-lux-content").innerHTML =
+        "<p>Admin only. Sign in as a user with <code>role: admin</code> in Firestore.</p>";
+      return;
+    }
+    const data = await res.json();
+    state.all = data.products || [];
+    state.shown = state.all.slice();
+    applyFilters();
+  })();
+</script>
+{% endblock %}

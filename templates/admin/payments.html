@@ -1,0 +1,270 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-treasury-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>{{ page_content.title }}</h1>
+    <p class="muted admin-treasury-sub">{{ page_content.subtitle }}</p>
+  </div>
+  <div class="admin-treasury-head-actions">
+    <button type="button" class="btn btn-outline btn-sm admin-treasury-btn-ghost" id="treasury-csv-btn" title="Download ledger CSV">
+      <span class="admin-treasury-dl-ic" aria-hidden="true">⬇</span> Financials
+    </button>
+    <button type="button" class="btn btn-primary btn-sm" id="treasury-payout-btn">Payout Request</button>
+  </div>
+</section>
+
+<section class="admin-treasury-kpis">
+  <article class="admin-treasury-kpi admin-treasury-kpi--settled">
+    <p>Settled Funds</p>
+    <h3 id="kpi-settled">-</h3>
+  </article>
+  <article class="admin-treasury-kpi admin-treasury-kpi--pending">
+    <p>Pending Payouts</p>
+    <h3 id="kpi-pending">-</h3>
+  </article>
+  <article class="admin-treasury-kpi admin-treasury-kpi--dispute">
+    <p>Dispute Rate</p>
+    <h3 id="kpi-dispute">-</h3>
+  </article>
+  <article class="admin-treasury-kpi admin-treasury-kpi--avg">
+    <p>Avg Sale Value</p>
+    <h3 id="kpi-avg">-</h3>
+  </article>
+</section>
+
+<section class="admin-product-panel admin-treasury-panel">
+  <div class="admin-treasury-ledger-head">
+    <h2><span class="admin-treasury-shield" aria-hidden="true">◆</span> Encrypted Transaction Ledger</h2>
+    <div class="admin-treasury-gateway-pill" id="treasury-gateway-pill">
+      <span class="admin-treasury-dot"></span>
+      <span id="treasury-gateway-label">-</span>
+    </div>
+  </div>
+  <div class="admin-product-table-wrap admin-treasury-table-wrap">
+    <table class="admin-product-table admin-treasury-table">
+      <thead>
+        <tr>
+          <th>Reference Trace</th>
+          <th>Amount</th>
+          <th>Gateway Method</th>
+          <th>Settlement Status</th>
+          <th>Acquisition ID</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="treasury-body">
+        <tr><td colspan="6" class="muted">Loading treasury data from Firebase...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  async function bearerHeaders() {
+    if (typeof window.getBearerHeaders === "function") {
+      return (await window.getBearerHeaders()) || {};
+    }
+    var t = localStorage.getItem("idToken");
+    return t ? { Authorization: "Bearer " + t } : {};
+  }
+
+  var body = document.getElementById("treasury-body");
+  var csvBtn = document.getElementById("treasury-csv-btn");
+  var payoutBtn = document.getElementById("treasury-payout-btn");
+  var els = {
+    settled: document.getElementById("kpi-settled"),
+    pending: document.getElementById("kpi-pending"),
+    dispute: document.getElementById("kpi-dispute"),
+    avg: document.getElementById("kpi-avg"),
+    gw: document.getElementById("treasury-gateway-label"),
+    pill: document.getElementById("treasury-gateway-pill"),
+  };
+
+  function fmtInr(n) {
+    var v = Number(n || 0);
+    var sign = v < 0 ? "-" : "";
+    var abs = Math.abs(v);
+    return sign + "₹" + abs.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function fmtPct(n) {
+    return Number(n || 0).toFixed(2) + "%";
+  }
+
+  function fmtLedgerWhen(iso) {
+    var d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    var mo = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+    var dd = String(d.getDate()).padStart(2, "0");
+    var hh = String(d.getHours()).padStart(2, "0");
+    var mm = String(d.getMinutes()).padStart(2, "0");
+    return mo[d.getMonth()] + " " + dd + ", " + hh + ":" + mm;
+  }
+
+  function gwShort(t) {
+    var g = String(t || "").toLowerCase();
+    if (g.indexOf("amex") !== -1) return "AX";
+    if (g.indexOf("visa") !== -1) return "VI";
+    if (g.indexOf("master") !== -1) return "MC";
+    if (g.indexOf("apple") !== -1) return "";
+    if (g.indexOf("bank") !== -1) return "BT";
+    if (g.indexOf("upi") !== -1 || g.indexOf("razor") !== -1) return "RZ";
+    return "•";
+  }
+
+  function gwClass(t) {
+    var g = String(t || "").toLowerCase();
+    if (g.indexOf("amex") !== -1) return "admin-treasury-gw-ic--amex";
+    if (g.indexOf("visa") !== -1) return "admin-treasury-gw-ic--visa";
+    if (g.indexOf("master") !== -1) return "admin-treasury-gw-ic--mc";
+    if (g.indexOf("apple") !== -1) return "admin-treasury-gw-ic--apple";
+    if (g.indexOf("bank") !== -1) return "admin-treasury-gw-ic--bank";
+    return "admin-treasury-gw-ic--rz";
+  }
+
+  function statusClass(st) {
+    var s = String(st || "").toLowerCase();
+    if (s === "succeeded") return "admin-treasury-status--ok";
+    if (s === "processing") return "admin-treasury-status--processing";
+    if (s === "refunded") return "admin-treasury-status--refund";
+    return "admin-treasury-status--processing";
+  }
+
+  function amountClass(row) {
+    var amt = Number(row.amountInr || 0);
+    var st = String(row.settlementStatus || "").toLowerCase();
+    if (amt < 0 || st === "refunded") return "admin-treasury-amt--neg";
+    return "admin-treasury-amt--pos";
+  }
+
+  async function load() {
+    try {
+      var h = await bearerHeaders();
+      var res = await fetch("/api/admin/treasury", { headers: Object.assign({}, h) });
+      if (res.status === 401 || res.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+      var ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (!ct.includes("application/json")) {
+        var txt = await res.text();
+        throw new Error("Server returned non-JSON (" + res.status + "). " + (txt ? txt.slice(0, 120) : ""));
+      }
+      var data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.message || "Request failed (" + res.status + ")");
+      }
+      var kpis = data.kpis || {};
+      els.settled.textContent = fmtInr(kpis.settledFunds);
+      els.pending.textContent = fmtInr(kpis.pendingPayouts);
+      els.dispute.textContent = fmtPct(kpis.disputeRate);
+      els.avg.textContent = fmtInr(kpis.avgSaleValue);
+
+      var gw = data.gateway || {};
+      els.gw.textContent = (gw.label || "").toUpperCase();
+      els.pill.classList.toggle("is-offline", !gw.connected);
+
+      var txs = data.transactions || [];
+      if (!txs.length) {
+        body.innerHTML =
+          '<tr><td colspan="6" class="muted">No transactions found. Add documents to <code>admin_transactions</code> or <code>transactions</code> in Firebase.</td></tr>';
+        return;
+      }
+      body.innerHTML = txs.map(function (t) {
+      var refEsc = String(t.referenceTrace || "").replace(/"/g, "&quot;");
+      var ordEsc = String(t.acquisitionId || "").replace(/"/g, "&quot;");
+      return (
+        "<tr>" +
+        '<td><div class="admin-treasury-ref"><strong>' + (t.referenceTrace || "") + "</strong>" +
+        '<small>' + fmtLedgerWhen(t.createdAt) + "</small></div></td>" +
+        '<td class="' + amountClass(t) + '">' + fmtInr(t.amountInr) + "</td>" +
+        '<td><div class="admin-treasury-gw">' +
+        '<span class="admin-treasury-gw-ic ' + gwClass(t.gatewayType) + '" title="' + (t.gatewayType || "") + '">' + gwShort(t.gatewayDisplay || t.gatewayType) + "</span>" +
+        "<span>" + (t.gatewayDisplay || "") + "</span></div></td>" +
+        '<td><span class="admin-treasury-status ' + statusClass(t.settlementStatus) + '">' +
+        String(t.settlementStatus || "").toUpperCase() + "</span></td>" +
+        "<td><span class=\"admin-treasury-ord\">" + (t.acquisitionId || "") + "</span></td>" +
+        '<td><div class="admin-treasury-actions">' +
+        '<button type="button" class="admin-treasury-more" data-ref="' + refEsc + '" data-ord="' + ordEsc + '" title="Actions">⋯</button>' +
+        "</div></td>" +
+        "</tr>"
+      );
+      }).join("");
+
+      body.querySelectorAll(".admin-treasury-more").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var ref = btn.getAttribute("data-ref") || "";
+          var ord = btn.getAttribute("data-ord") || "";
+          var choice = window.prompt("Copy: type ref, ord, or cancel", "ref");
+          if (!choice) return;
+          var txt = choice.toLowerCase().indexOf("ord") === 0 ? ord : ref;
+          if (!txt) return;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt.replace(/&quot;/g, '"'));
+            if (window.showToast) window.showToast("Copied.", "success");
+          }
+        });
+      });
+    } catch (err) {
+      console.error(err);
+      els.settled.textContent = "—";
+      els.pending.textContent = "—";
+      els.dispute.textContent = "—";
+      els.avg.textContent = "—";
+      els.gw.textContent = "ERROR";
+      body.innerHTML =
+        '<tr><td colspan="6" class="muted">Could not load treasury: ' +
+        String(err && err.message ? err.message : err) +
+        ". Ensure you are signed in as admin and the server is running.</td></tr>";
+      if (window.showToast) window.showToast("Treasury load failed — check console.", "error");
+    }
+  }
+
+  csvBtn.addEventListener("click", async function () {
+    var h = await bearerHeaders();
+    var res = await fetch("/api/admin/treasury?format=csv", { headers: Object.assign({}, h) });
+    if (!res.ok) {
+      if (window.showToast) window.showToast("Could not export CSV.", "error");
+      return;
+    }
+    var blob = await res.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "treasury-ledger.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    if (window.showToast) window.showToast("Financials exported.", "success");
+  });
+
+  payoutBtn.addEventListener("click", async function () {
+    var amtRaw = window.prompt("Payout amount (INR), optional", "");
+    var note = window.prompt("Internal note", "") || "";
+    var payload = { note: note };
+    if (amtRaw !== null && String(amtRaw).trim() !== "") {
+      var n = parseFloat(amtRaw.replace(/,/g, ""));
+      if (!Number.isNaN(n)) payload.amountInr = n;
+    }
+    var h = await bearerHeaders();
+    var res = await fetch("/api/admin/treasury/payout-request", {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, h),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      if (window.showToast) window.showToast("Could not submit payout request.", "error");
+      return;
+    }
+    var out = await res.json();
+    if (window.showToast) window.showToast("Payout request queued: " + (out.id || ""), "success");
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

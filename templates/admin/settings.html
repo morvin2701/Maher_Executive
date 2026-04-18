@@ -1,0 +1,303 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-sys-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>{{ page_content.title }}</h1>
+    <p class="muted admin-sys-sub">{{ page_content.subtitle }}</p>
+  </div>
+  <button type="button" class="btn btn-primary btn-sm admin-sys-persist" id="sys-persist-btn">
+    <span class="admin-sys-disk" aria-hidden="true">💾</span> Persist All Changes
+  </button>
+</section>
+
+<div class="admin-sys-layout">
+  <nav class="admin-sys-nav" id="sys-nav" aria-label="Configuration categories"></nav>
+  <div class="admin-sys-main">
+    <header class="admin-sys-panel-head">
+      <h2 id="sys-panel-title">—</h2>
+    </header>
+    <div class="admin-sys-panel-body" id="sys-panel-body"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  async function bearerHeaders() {
+    if (typeof window.getBearerHeaders === "function") {
+      return (await window.getBearerHeaders()) || {};
+    }
+    var t = localStorage.getItem("idToken");
+    return t ? { Authorization: "Bearer " + t } : {};
+  }
+
+  var navEl = document.getElementById("sys-nav");
+  var panelTitle = document.getElementById("sys-panel-title");
+  var panelBody = document.getElementById("sys-panel-body");
+  var persistBtn = document.getElementById("sys-persist-btn");
+
+  var state = { categories: [], activeCategoryId: "general", raw: null };
+
+  function esc(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function findCatIndex() {
+    var id = state.activeCategoryId;
+    return state.categories.findIndex(function (c) {
+      return c.id === id;
+    });
+  }
+
+  function activeCategory() {
+    var i = findCatIndex();
+    return i >= 0 ? state.categories[i] : null;
+  }
+
+  function renderNav() {
+    navEl.innerHTML = state.categories
+      .map(function (c) {
+        var active = c.id === state.activeCategoryId ? " is-active" : "";
+        return (
+          '<button type="button" class="admin-sys-nav-card' +
+          active +
+          '" data-cat="' +
+          esc(c.id) +
+          '">' +
+          '<span class="admin-sys-nav-ic admin-sys-nav-ic--' +
+          esc(c.icon || "general") +
+          '" aria-hidden="true"></span>' +
+          '<span class="admin-sys-nav-text">' +
+          '<strong>' +
+          esc(c.title || "") +
+          "</strong>" +
+          "<small>" +
+          esc(c.description || "") +
+          "</small>" +
+          "</span>" +
+          "</button>"
+        );
+      })
+      .join("");
+
+    navEl.querySelectorAll("[data-cat]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.activeCategoryId = btn.getAttribute("data-cat");
+        renderNav();
+        renderPanel();
+      });
+    });
+  }
+
+  function renderPanel() {
+    var cat = activeCategory();
+    if (!cat) {
+      panelTitle.textContent = "—";
+      panelBody.innerHTML = '<p class="muted">Select a category.</p>';
+      return;
+    }
+    panelTitle.textContent = cat.panelTitle || cat.title || "Control Matrix";
+
+    panelBody.innerHTML = cat.fields
+      .map(function (f, fi) {
+        var id = "sf-" + cat.id + "-" + f.key;
+        var key = esc(f.key);
+        var label = esc(f.label || f.key);
+        var help = f.help ? '<p class="admin-sys-help">' + esc(f.help) + "</p>" : "";
+
+        if (f.type === "boolean") {
+          var on = !!f.value;
+          return (
+            '<div class="admin-sys-field admin-sys-field--toggle">' +
+            '<div class="admin-sys-field-label">' +
+            "<strong>" +
+            label +
+            "</strong>" +
+            help +
+            "</div>" +
+            '<button type="button" class="admin-sys-switch' +
+            (on ? " is-on" : "") +
+            '" role="switch" aria-checked="' +
+            on +
+            '" data-toggle="' +
+            esc(cat.id) +
+            '" data-key="' +
+            key +
+            '" id="' +
+            id +
+            '"><i></i></button>' +
+            "</div>"
+          );
+        }
+
+        if (f.type === "textarea") {
+          return (
+            '<label class="admin-sys-field admin-sys-field--stack" for="' +
+            id +
+            '">' +
+            "<span>" +
+            label +
+            "</span>" +
+            '<textarea id="' +
+            id +
+            '" rows="4" data-field="' +
+            fi +
+            '">' +
+            esc(f.value || "") +
+            "</textarea>" +
+            "</label>"
+          );
+        }
+
+        if (f.type === "select") {
+          var opts = (f.options || []).map(function (o) {
+            var sel = o === f.value ? ' selected=""' : "";
+            return '<option value="' + esc(o) + '"' + sel + ">" + esc(o) + "</option>";
+          }).join("");
+          return (
+            '<label class="admin-sys-field admin-sys-field--stack" for="' +
+            id +
+            '">' +
+            "<span>" +
+            label +
+            "</span>" +
+            '<select id="' +
+            id + '" data-field="' + fi + '">' +
+            opts +
+            "</select>" +
+            "</label>"
+          );
+        }
+
+        var inputType =
+          f.type === "number"
+            ? "number"
+            : "text";
+        return (
+          '<label class="admin-sys-field admin-sys-field--stack" for="' +
+          id +
+          '">' +
+          "<span>" +
+          label +
+          "</span>" +
+          '<input id="' +
+          id +
+          '" type="' +
+          inputType +
+          '" value="' +
+          esc(f.value !== undefined && f.value !== null ? f.value : "") +
+          '" data-field="' +
+          fi +
+          '" />' +
+          "</label>"
+        );
+      })
+      .join("");
+
+    panelBody.querySelectorAll(".admin-sys-switch[data-toggle]").forEach(function (sw) {
+      sw.addEventListener("click", function () {
+        var cid = sw.getAttribute("data-toggle");
+        var fk = sw.getAttribute("data-key");
+        var cix = state.categories.findIndex(function (x) {
+          return x.id === cid;
+        });
+        if (cix < 0) return;
+        var cat = state.categories[cix];
+        cat.fields.forEach(function (fld) {
+          if (fld.key === fk) {
+            fld.value = !fld.value;
+          }
+        });
+        renderPanel();
+      });
+    });
+
+    panelBody.querySelectorAll("textarea[data-field], input[data-field], select[data-field]").forEach(function (el) {
+      el.addEventListener("change", function () {
+        var fi = parseInt(el.getAttribute("data-field"), 10);
+        if (Number.isNaN(fi)) return;
+        var fld = cat.fields[fi];
+        if (!fld) return;
+        if (fld.type === "number") {
+          fld.value = el.value === "" ? 0 : Number(el.value);
+        } else if (fld.type === "boolean") {
+          fld.value = !!el.checked;
+        } else {
+          fld.value = el.value;
+        }
+      });
+      el.addEventListener("input", function () {
+        var fi = parseInt(el.getAttribute("data-field"), 10);
+        if (Number.isNaN(fi)) return;
+        var fld = cat.fields[fi];
+        if (!fld || fld.type === "boolean") return;
+        if (fld.type === "number") {
+          fld.value = el.value === "" ? 0 : Number(el.value);
+        } else {
+          fld.value = el.value;
+        }
+      });
+    });
+  }
+
+  async function load() {
+    try {
+      var h = await bearerHeaders();
+      var res = await fetch("/api/admin/system-settings", { headers: Object.assign({}, h) });
+      if (res.status === 401 || res.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Load failed");
+      state.raw = data;
+      state.categories = JSON.parse(JSON.stringify(data.categories || []));
+      state.activeCategoryId = data.activeCategoryId || "general";
+      renderNav();
+      renderPanel();
+    } catch (e) {
+      console.error(e);
+      panelBody.innerHTML =
+        '<p class="muted">' + esc(e.message || String(e)) + "</p>";
+      if (window.showToast) window.showToast("Could not load system settings.", "error");
+    }
+  }
+
+  persistBtn.addEventListener("click", async function () {
+    try {
+      var h = await bearerHeaders();
+      var res = await fetch("/api/admin/system-settings", {
+        method: "PUT",
+        headers: Object.assign({ "Content-Type": "application/json" }, h),
+        body: JSON.stringify({
+          categories: state.categories,
+          activeCategoryId: state.activeCategoryId,
+        }),
+      });
+      var data = await res.json().catch(function () {
+        return {};
+      });
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (data.settings && data.settings.categories) {
+        state.categories = JSON.parse(JSON.stringify(data.settings.categories));
+        state.activeCategoryId = data.settings.activeCategoryId || state.activeCategoryId;
+      }
+      if (window.showToast) window.showToast("All changes persisted to Firebase.", "success");
+      renderNav();
+      renderPanel();
+    } catch (e) {
+      console.error(e);
+      if (window.showToast) window.showToast(String(e.message || e), "error");
+    }
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

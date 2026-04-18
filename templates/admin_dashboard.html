@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<section class="admin-head">
+  <h1>Admin Dashboard</h1>
+  <a class="btn btn-gold" href="{{ url_for('admin_product_new') }}">Add Product</a>
+</section>
+<h2>Products</h2>
+<div class="admin-table-wrap">
+<table class="admin-table">
+  <tr><th>Name</th><th>SKU</th><th>Stock</th><th>Actions</th></tr>
+  {% for product in products %}
+  <tr>
+    <td>{{ product['name'] }}</td>
+    <td>{{ product['sku'] }}</td>
+    <td>{{ product['stock'] }}</td>
+    <td>
+      <a href="{{ url_for('admin_product_edit', product_id=product['id']) }}">Edit</a>
+      <form method="post" action="{{ url_for('admin_product_delete', product_id=product['id']) }}" style="display:inline;">
+        <button>Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+<h2>Recent Orders</h2>
+<div class="admin-table-wrap">
+<table class="admin-table">
+  <tr><th>ID</th><th>Country</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+  {% for order in orders %}
+  <tr>
+    <td>#{{ order['id'] }}</td>
+    <td>{{ order['country']|upper }}</td>
+    <td>{{ order['total_amount'] }}</td>
+    <td>{{ order['payment_method'] }}</td>
+    <td>{{ order['status'] }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

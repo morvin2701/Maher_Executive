@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Product — ME Clothing{% endblock %}
+{% block content %}
+<section id="pdp" class="pdp-premium-shell" data-slug="{{ slug }}">
+  <p class="pdp-breadcrumb">HOME / READY-TO-WEAR / <span id="pdp-crumb">PRODUCT</span></p>
+  <div class="pdp-premium-grid">
+    <div class="pdp-gallery-col">
+      <div id="pdp-thumbs" class="pdp-thumbs"></div>
+      <div id="pdp-main-media" class="pdp-main-media"></div>
+    </div>
+    <div class="pdp-info-col">
+      <div class="pdp-rating-row">
+        <span class="badge">Sale</span>
+        <span id="pdp-rating">★★★★★</span>
+        <span class="muted" id="pdp-review-count">24 reviews</span>
+      </div>
+      <h1 id="pdp-title" class="pdp-title-premium"></h1>
+      <p id="pdp-price" class="pdp-price-premium"></p>
+      <p id="pdp-desc" class="pdp-desc-premium"></p>
+
+      <div class="pdp-field">
+        <div class="pdp-field-head">
+          <span>Select Color</span>
+          <span id="pdp-color-name" class="muted">Onyx</span>
+        </div>
+        <div id="pdp-colors" class="pdp-color-row"></div>
+      </div>
+
+      <div class="pdp-field">
+        <div class="pdp-field-head">
+          <span>Select Size</span>
+          <a href="/size-guide" class="muted">Size Guide</a>
+        </div>
+        <div id="pdp-sizes" class="pdp-size-row"></div>
+      </div>
+
+      <div class="pdp-buy-row">
+        <div class="pdp-qty">
+          <button id="qty-dec" type="button">−</button>
+          <span id="qty-value">1</span>
+          <button id="qty-inc" type="button">+</button>
+        </div>
+        <button type="button" class="btn btn-primary pdp-add-btn" id="pdp-add">Add to Cart</button>
+        <button type="button" class="pdp-fav-btn" id="pdp-fav">♡</button>
+      </div>
+
+      <div class="pdp-benefits">
+        <article><strong>Free Shipping</strong><span>Complimentary delivery on this piece.</span></article>
+        <article><strong>Returns & Exchanges</strong><span>30-day effortless return policy.</span></article>
+        <article><strong>Authenticity Guaranteed</strong><span>Crafted through premium verification process.</span></article>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  const slug = document.getElementById("pdp").dataset.slug || "";
+  const pdpRoot = document.getElementById("pdp");
+  let qty = 1;
+  let selectedColor = "Onyx";
+  let selectedSize = "M";
+
+  if (sessionStorage.getItem("pdpTransition") === "1") {
+    pdpRoot.classList.add("pdp-enter");
+    requestAnimationFrame(() => {
+      pdpRoot.classList.add("is-ready");
+    });
+    sessionStorage.removeItem("pdpTransition");
+  }
+
+  function renderThumbs(images) {
+    const thumbs = document.getElementById("pdp-thumbs");
+    const media = document.getElementById("pdp-main-media");
+    thumbs.innerHTML = "";
+    const safe = images.length ? images : [{ url: "", alt: "" }];
+    safe.forEach((img, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pdp-thumb" + (idx === 0 ? " active" : "");
+      btn.innerHTML = img.url
+        ? '<img src="' + img.url + '" alt="' + (img.alt || "") + '" />'
+        : '<span class="skeleton" style="display:block;width:100%;height:100%;"></span>';
+      btn.addEventListener("click", () => {
+        media.innerHTML = img.url ? '<img src="' + img.url + '" alt="' + (img.alt || "") + '" />' : "";
+        thumbs.querySelectorAll(".pdp-thumb").forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+      });
+      thumbs.appendChild(btn);
+    });
+    const first = safe[0];
+    media.innerHTML = first.url ? '<img src="' + first.url + '" alt="' + (first.alt || "") + '" />' : "";
+  }
+
+  function renderSizes(product) {
+    const sizesWrap = document.getElementById("pdp-sizes");
+    sizesWrap.innerHTML = "";
+    const variants = Array.isArray(product.variants) && product.variants.length
+      ? product.variants
+      : [{ size: "XS", stock: 8 }, { size: "S", stock: 8 }, { size: "M", stock: 8 }, { size: "L", stock: 8 }, { size: "XL", stock: 8 }];
+    const uniqueSizes = [...new Set(variants.map((v) => String(v.size || "").trim()).filter(Boolean))];
+    selectedSize = uniqueSizes[0] || "M";
+    uniqueSizes.forEach((size, idx) => {
+      const stockForSize = variants.find((v) => String(v.size || "").trim() === size);
+      const disabled = stockForSize && Number(stockForSize.stock || 0) <= 0;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pdp-size-btn" + (idx === 0 ? " active" : "");
+      btn.textContent = size;
+      if (disabled) {
+        btn.classList.add("disabled");
+        btn.disabled = true;
+      }
+      btn.addEventListener("click", () => {
+        selectedSize = size;
+        sizesWrap.querySelectorAll(".pdp-size-btn").forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+      });
+      sizesWrap.appendChild(btn);
+    });
+  }
+
+  function renderColors(product) {
+    const colorsWrap = document.getElementById("pdp-colors");
+    colorsWrap.innerHTML = "";
+    const variants = Array.isArray(product.variants) && product.variants.length ? product.variants : [];
+    let colors = [...new Set(variants.map((v) => String(v.color || "").trim()).filter(Boolean))];
+    if (!colors.length) colors = ["Onyx", "Charcoal"];
+    selectedColor = colors[0];
+    document.getElementById("pdp-color-name").textContent = selectedColor;
+    colors.forEach((color, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "pdp-color-btn" + (idx === 0 ? " active" : "");
+      btn.title = color;
+      btn.style.background = idx === 0 ? "#0f0f0f" : "#2c4a4a";
+      btn.addEventListener("click", () => {
+        selectedColor = color;
+        document.getElementById("pdp-color-name").textContent = color;
+        colorsWrap.querySelectorAll(".pdp-color-btn").forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+      });
+      colorsWrap.appendChild(btn);
+    });
+  }
+
+  function addToCart(product) {
+    const raw = localStorage.getItem("cart") || "{}";
+    const cart = JSON.parse(raw);
+    const id = product.id;
+    cart[id] = (cart[id] || 0) + qty;
+    localStorage.setItem("cart", JSON.stringify(cart));
+    if (window.showToast) window.showToast("Added " + qty + " to bag (" + selectedSize + " / " + selectedColor + ")", "success");
+  }
+
+  document.getElementById("qty-dec").addEventListener("click", () => {
+    qty = Math.max(1, qty - 1);
+    document.getElementById("qty-value").textContent = String(qty);
+  });
+  document.getElementById("qty-inc").addEventListener("click", () => {
+    qty = Math.min(9, qty + 1);
+    document.getElementById("qty-value").textContent = String(qty);
+  });
+
+  (async function () {
+    const res = await fetch("/api/products/slug/" + encodeURIComponent(slug));
+    if (!res.ok) {
+      document.getElementById("pdp").innerHTML = "<p>Product not found.</p>";
+      return;
+    }
+    const p = await res.json();
+    document.getElementById("pdp-crumb").textContent = p.name;
+    document.getElementById("pdp-title").textContent = p.name;
+    const reviewCount = Number(p.reviewCount || 24);
+    document.getElementById("pdp-review-count").textContent = reviewCount + " reviews";
+    document.getElementById("pdp-desc").textContent = p.description || "";
+    document.getElementById("pdp-price").innerHTML =
+      "<span class='pdp-price-main'>₹" +
+      (p.price || 0) +
+      "</span>" +
+      (p.comparePrice
+        ? '<span class="price-compare">₹' + p.comparePrice + "</span>"
+        : "");
+
+    const images = Array.isArray(p.images) ? p.images : [];
+    renderThumbs(images);
+    renderSizes(p);
+    renderColors(p);
+
+    const ld = {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      name: p.name,
+      description: p.description,
+      image: images[0] && images[0].url ? images[0].url : "",
+      offers: {
+        "@type": "Offer",
+        priceCurrency: "INR",
+        price: String(p.price || 0),
+        availability: "https://schema.org/InStock",
+      },
+    };
+    const s = document.createElement("script");
+    s.type = "application/ld+json";
+    s.textContent = JSON.stringify(ld);
+    document.head.appendChild(s);
+
+    document.getElementById("pdp-add").onclick = function () {
+      addToCart(p);
+    };
+
+    document.getElementById("pdp-fav").onclick = function () {
+      const raw = localStorage.getItem("wishlist_ids") || "[]";
+      const set = new Set(JSON.parse(raw));
+      if (set.has(p.id)) set.delete(p.id);
+      else set.add(p.id);
+      localStorage.setItem("wishlist_ids", JSON.stringify(Array.from(set)));
+      this.textContent = set.has(p.id) ? "♥" : "♡";
+      if (window.showToast) window.showToast(set.has(p.id) ? "Added to wishlist" : "Removed from wishlist", "success");
+    };
+  })();
+</script>
+{% endblock %}

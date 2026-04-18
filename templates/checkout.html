@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Checkout — ME Clothing{% endblock %}
+{% block content %}
+<div class="page-shell" style="max-width:640px;">
+  <h1 style="font-family:var(--font-display);">Checkout</h1>
+  <p class="muted">Step 1 — Delivery. Use valid details; order is stored in Firestore via API.</p>
+  <div class="field"><label>Name</label><input id="cx-name" /></div>
+  <div class="field"><label>Phone</label><input id="cx-phone" /></div>
+  <div class="field"><label>Address</label><textarea id="cx-addr" rows="3"></textarea></div>
+  <div class="field"><label>City</label><input id="cx-city" /></div>
+  <div class="field"><label>Pincode</label><input id="cx-pin" /></div>
+  <p class="muted">Payment: Razorpay (card/UPI) when keys are set; otherwise use COD below.</p>
+  <div class="field"><label>Payment</label>
+    <select id="cx-pay"><option value="COD">COD</option><option value="UPI">UPI (Razorpay)</option><option value="Card">Card (Razorpay)</option></select>
+  </div>
+  <button type="button" class="btn btn-primary" id="cx-submit">Place order</button>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.getElementById("cx-submit").onclick = async function () {
+    const headers = await (window.getBearerHeaders ? window.getBearerHeaders() : {});
+    if (!headers.Authorization) {
+      showToast("Please sign in first.", "error");
+      window.location.href = "/auth";
+      return;
+    }
+    const raw = localStorage.getItem("cart") || "{}";
+    const cart = JSON.parse(raw);
+    const ids = Object.keys(cart);
+    if (!ids.length) {
+      showToast("Bag is empty", "error");
+      return;
+    }
+    const res = await fetch("/api/products?limit=200");
+    const data = await res.json();
+    const byId = {};
+    (data.products || []).forEach((p) => {
+      byId[p.id] = p;
+    });
+    const items = [];
+    let subtotal = 0;
+    ids.forEach((id) => {
+      const p = byId[id];
+      const qty = cart[id];
+      if (!p) return;
+      const line = (p.price || 0) * qty;
+      subtotal += line;
+      items.push({
+        productId: id,
+        name: p.name,
+        image: (p.images && p.images[0] && p.images[0].url) || "",
+        size: "",
+        color: "",
+        qty: qty,
+        price: p.price,
+      });
+    });
+    const pay = document.getElementById("cx-pay").value;
+    const body = {
+      items: items,
+      subtotal: subtotal,
+      shipping: subtotal >= 2999 ? 0 : 99,
+      tax: 0,
+      total: subtotal + (subtotal >= 2999 ? 0 : 99),
+      paymentMethod: pay,
+      paymentStatus: pay === "COD" ? "pending" : "pending",
+      shippingAddress: {
+        name: document.getElementById("cx-name").value,
+        phone: document.getElementById("cx-phone").value,
+        line1: document.getElementById("cx-addr").value,
+        city: document.getElementById("cx-city").value,
+        pincode: document.getElementById("cx-pin").value,
+        country: "IN",
+      },
+    };
+    const r = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      showToast("Order failed", "error");
+      return;
+    }
+    const o = await r.json();
+    localStorage.setItem("cart", "{}");
+    window.location.href = "/order-confirmation/" + encodeURIComponent(o.orderId);
+  };
+</script>
+{% endblock %}

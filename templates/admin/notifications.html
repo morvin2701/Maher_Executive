@@ -1,0 +1,247 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-com-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>Brand Communications</h1>
+    <p class="muted">Manage member notifications and retail broadcasts.</p>
+  </div>
+  <button class="btn btn-primary btn-sm" id="com-new-btn">Initialize Broadcast</button>
+</section>
+
+<section class="admin-com-kpis">
+  <article class="admin-com-kpi">
+    <p>Total Reach</p>
+    <h3 id="com-kpi-reach">-</h3>
+  </article>
+  <article class="admin-com-kpi">
+    <p>Active Campaigns</p>
+    <h3 id="com-kpi-active">-</h3>
+  </article>
+  <article class="admin-com-kpi">
+    <p>Avg Open Rate</p>
+    <h3 id="com-kpi-open">-</h3>
+  </article>
+</section>
+
+<section class="admin-product-panel admin-com-panel">
+  <p class="admin-com-table-title">Transmission History</p>
+  <div class="admin-product-table-wrap">
+    <table class="admin-product-table admin-com-table">
+      <thead>
+        <tr>
+          <th>Communication Title</th>
+          <th>Target Segment</th>
+          <th>Reach</th>
+          <th>Timestamp</th>
+          <th>Medium</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="com-table-body">
+        <tr><td colspan="6" class="muted">Loading communications...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { rows: [] };
+    const els = {
+      body: document.getElementById("com-table-body"),
+      kpiReach: document.getElementById("com-kpi-reach"),
+      kpiActive: document.getElementById("com-kpi-active"),
+      kpiOpen: document.getElementById("com-kpi-open"),
+      newBtn: document.getElementById("com-new-btn"),
+    };
+
+    function formatReach(v) {
+      const n = Number(v || 0);
+      if (n >= 1000) return (n / 1000).toFixed(1).replace(".0", "") + "k Users";
+      return n.toLocaleString("en-IN") + " Users";
+    }
+    function formatDate(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "-";
+      return d.toISOString().slice(0, 16).replace("T", " ");
+    }
+    function statusClass(s) {
+      const val = String(s || "").toLowerCase();
+      if (val === "live") return "delivered";
+      if (val === "scheduled") return "shipped";
+      if (val === "paused" || val === "draft") return "pending";
+      return "cancelled";
+    }
+
+    function renderKpis(kpis) {
+      els.kpiReach.textContent = Number(kpis.totalReach || 0).toLocaleString("en-IN");
+      els.kpiActive.textContent = Number(kpis.activeCampaigns || 0) + " Live";
+      els.kpiOpen.textContent = Number(kpis.avgOpenRate || 0).toFixed(1) + "%";
+    }
+
+    function renderRows() {
+      if (!state.rows.length) {
+        els.body.innerHTML = '<tr><td colspan="6" class="muted">No communications found in Firebase.</td></tr>';
+        return;
+      }
+      els.body.innerHTML = state.rows
+        .map(
+          (r) =>
+            "<tr>" +
+            '<td><div class="admin-com-title"><span>◉</span><div><strong>' +
+            (r.title || "") +
+            "</strong><p>" +
+            (r.message || "") +
+            "</p></div></div></td>" +
+            "<td>" +
+            (r.segment || "") +
+            "</td>" +
+            "<td>" +
+            formatReach(r.reach) +
+            "</td>" +
+            "<td>" +
+            formatDate(r.createdAt || r.scheduledAt) +
+            "</td>" +
+            "<td>" +
+            (r.medium || "") +
+            '<br/><span class="admin-status ' +
+            statusClass(r.status) +
+            '">' +
+            String(r.status || "").toUpperCase() +
+            "</span></td>" +
+            '<td><div class="admin-prod-actions">' +
+            '<button type="button" data-cycle="' +
+            r.id +
+            '">Cycle</button>' +
+            '<button type="button" data-edit="' +
+            r.id +
+            '">Edit</button>' +
+            '<button type="button" data-delete="' +
+            r.id +
+            '">Delete</button>' +
+            "</div></td>" +
+            "</tr>"
+        )
+        .join("");
+
+      els.body.querySelectorAll("[data-cycle]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-cycle");
+          const row = state.rows.find((x) => x.id === id);
+          if (!id || !row) return;
+          const flow = ["live", "scheduled", "paused", "archived"];
+          const idx = flow.indexOf(String(row.status || "live"));
+          const next = flow[(idx + 1) % flow.length];
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/notifications/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ status: next }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update status.", "error");
+            return;
+          }
+          await load();
+        });
+      });
+
+      els.body.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-edit");
+          const row = state.rows.find((x) => x.id === id);
+          if (!id || !row) return;
+          const title = window.prompt("Broadcast title", row.title || "");
+          if (title === null) return;
+          const message = window.prompt("Broadcast message", row.message || "");
+          if (message === null) return;
+          const segment = window.prompt("Target segment", row.segment || "");
+          if (segment === null) return;
+          const medium = window.prompt("Medium", row.medium || "");
+          if (medium === null) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/notifications/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ title, message, segment, medium }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not edit broadcast.", "error");
+            return;
+          }
+          await load();
+        });
+      });
+
+      els.body.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-delete");
+          if (!id || !window.confirm("Delete this broadcast?")) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/notifications/" + encodeURIComponent(id), {
+            method: "DELETE",
+            headers: { ...h },
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not delete broadcast.", "error");
+            return;
+          }
+          await load();
+        });
+      });
+    }
+
+    async function load() {
+      const h = await window.getBearerHeaders();
+      const res = await fetch("/api/admin/notifications", { headers: { ...h } });
+      if (res.status === 401 || res.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+      const data = await res.json();
+      state.rows = data.notifications || [];
+      renderKpis(data.kpis || {});
+      renderRows();
+    }
+
+    els.newBtn.addEventListener("click", async () => {
+      const title = window.prompt("Broadcast title");
+      if (!title) return;
+      const message = window.prompt("Broadcast message");
+      if (!message) return;
+      const segment = window.prompt("Target segment", "All App Users");
+      if (segment === null) return;
+      const medium = window.prompt("Medium", "global_in-app");
+      if (medium === null) return;
+      const h = await window.getBearerHeaders();
+      const res = await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...h },
+        body: JSON.stringify({
+          title,
+          message,
+          segment,
+          medium,
+          status: "live",
+          reach: 0,
+          openRate: 0,
+          openedCount: 0,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (window.showToast) window.showToast(err.error || "Could not create broadcast.", "error");
+        return;
+      }
+      await load();
+      if (window.showToast) window.showToast("Broadcast initialized.", "success");
+    });
+
+    await load();
+  })();
+</script>
+{% endblock %}

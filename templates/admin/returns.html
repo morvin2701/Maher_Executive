@@ -1,0 +1,186 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-ret-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>Reverse Logistics</h1>
+    <p class="muted">Manage returns, quality control and refund approvals.</p>
+  </div>
+</section>
+
+<section class="admin-ret-kpis">
+  <article class="admin-ret-kpi">
+    <p>Pending Inspection</p>
+    <h3 id="ret-pending">0 Requests</h3>
+  </article>
+  <article class="admin-ret-kpi">
+    <p>Refunded This Month</p>
+    <h3 id="ret-refunded">₹0</h3>
+  </article>
+  <article class="admin-ret-kpi">
+    <p>Quality Approval Rate</p>
+    <h3 id="ret-approval">0%</h3>
+  </article>
+</section>
+
+<section class="admin-ret-tools">
+  <label class="admin-product-search">
+    <span>⌕</span>
+    <input id="ret-search" placeholder="Search return ID or order ID..." />
+  </label>
+  <button type="button" class="btn btn-outline btn-sm" id="ret-filter-btn">Filter Logic</button>
+</section>
+
+<section class="admin-product-panel">
+  <div class="admin-product-table-wrap">
+    <table class="admin-product-table admin-ret-table">
+      <thead>
+        <tr>
+          <th>Return Meta</th>
+          <th>Acquisition ID</th>
+          <th>Initiated By</th>
+          <th>Justification</th>
+          <th>Workflow Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="ret-table-body">
+        <tr><td colspan="6" class="muted">Loading returns...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { all: [], shown: [], q: "", filter: "all" };
+    const els = {
+      body: document.getElementById("ret-table-body"),
+      search: document.getElementById("ret-search"),
+      filterBtn: document.getElementById("ret-filter-btn"),
+      pending: document.getElementById("ret-pending"),
+      refunded: document.getElementById("ret-refunded"),
+      approval: document.getElementById("ret-approval"),
+    };
+
+    function money(v) {
+      return "₹" + Number(v || 0).toLocaleString("en-IN");
+    }
+    function dateStr(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "Recent";
+      return d.toISOString().slice(0, 10);
+    }
+    function statusLabel(s) {
+      return String(s || "").replaceAll("_", " ").toUpperCase();
+    }
+    function statusClass(s) {
+      if (s === "refunded") return "delivered";
+      if (s === "approved") return "shipped";
+      if (s === "rejected") return "cancelled";
+      return "pending";
+    }
+
+    function apply() {
+      const q = state.q.trim().toLowerCase();
+      state.shown = state.all.filter((r) => {
+        const filterMatch = state.filter === "all" ? true : r.status === state.filter;
+        if (!filterMatch) return false;
+        if (!q) return true;
+        return [r.returnCode, r.acquisitionId, r.initiatedBy, r.justification]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(q);
+      });
+      render();
+    }
+
+    function render() {
+      if (!state.shown.length) {
+        els.body.innerHTML = '<tr><td colspan="6" class="muted">No returns found.</td></tr>';
+        return;
+      }
+      els.body.innerHTML = state.shown
+        .map(
+          (r) =>
+            "<tr>" +
+            "<td><strong>#" + (r.returnCode || "RET") + "</strong><p class='admin-order-time'>" + dateStr(r.date) + "</p></td>" +
+            "<td>" + (r.acquisitionId || "") + "</td>" +
+            "<td>" + (r.initiatedBy || "Client") + "</td>" +
+            "<td>\"" + (r.justification || "") + "\"</td>" +
+            '<td><select class="admin-order-status" data-id="' +
+            r.id +
+            '">' +
+            ["pending_inspection","approved","refunded","rejected"]
+              .map((s) => '<option value="' + s + '"' + (s === r.status ? " selected" : "") + ">" + statusLabel(s) + "</option>")
+              .join("") +
+            "</select>" +
+            '<span class="admin-status ' + statusClass(r.status) + '" style="margin-left:.35rem;">' + statusLabel(r.status) + "</span></td>" +
+            '<td><div class="admin-prod-actions"><button type="button" data-dots="' + r.id + '">...</button></div></td>' +
+            "</tr>"
+        )
+        .join("");
+
+      els.body.querySelectorAll(".admin-order-status").forEach((sel) => {
+        sel.addEventListener("change", async () => {
+          const id = sel.getAttribute("data-id");
+          if (!id) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/returns/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ status: sel.value }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update return status.", "error");
+            return;
+          }
+          const row = state.all.find((x) => x.id === id);
+          if (row) row.status = sel.value;
+          apply();
+          if (window.showToast) window.showToast("Return workflow updated.", "success");
+        });
+      });
+    }
+
+    els.search.addEventListener("input", () => {
+      state.q = els.search.value || "";
+      apply();
+    });
+
+    els.filterBtn.addEventListener("click", () => {
+      const flow = ["all", "pending_inspection", "approved", "refunded", "rejected"];
+      const idx = flow.indexOf(state.filter);
+      state.filter = flow[(idx + 1) % flow.length];
+      const labels = {
+        all: "Filter Logic",
+        pending_inspection: "Pending Only",
+        approved: "Approved Only",
+        refunded: "Refunded Only",
+        rejected: "Rejected Only",
+      };
+      els.filterBtn.textContent = labels[state.filter];
+      apply();
+    });
+
+    const h = await window.getBearerHeaders();
+    const res = await fetch("/api/admin/returns", { headers: { ...h } });
+    if (res.status === 401 || res.status === 403) {
+      document.querySelector(".admin-lux-content").innerHTML =
+        "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+      return;
+    }
+    const data = await res.json();
+    state.all = data.returns || [];
+    state.shown = state.all.slice();
+    const k = data.kpis || {};
+    els.pending.textContent = Number(k.pendingInspection || 0) + " Requests";
+    els.refunded.textContent = money(k.refundedThisMonth || 0);
+    els.approval.textContent = Number(k.qualityApprovalRate || 0).toFixed(1) + "%";
+    render();
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}About — ME Clothing{% endblock %}
+{% block content %}
+<section class="about-shell">
+  <section class="about-hero">
+    <p class="hero-eyebrow">Maison Signature</p>
+    <h1>{{ page_content.title }}</h1>
+    <p class="about-hero-sub">{{ page_content.subtitle }}</p>
+    <div class="about-hero-meta">
+      <span>Established 2018</span>
+      <span>Mumbai / London</span>
+      <span>Luxury Ready-To-Wear</span>
+    </div>
+    <div class="about-hero-actions">
+      <a class="btn btn-primary" href="/women">Discover Women</a>
+      <a class="btn btn-outline" href="/men">Discover Men</a>
+    </div>
+  </section>
+
+  <section class="about-pillars">
+    {% for item in page_content.highlights %}
+      <article class="about-pillar-card">
+        <p>0{{ loop.index }}</p>
+        <h3>{{ item }}</h3>
+      </article>
+    {% endfor %}
+  </section>
+
+  <section class="about-story-grid">
+    <article class="about-story about-story-main">
+      <p class="crumb muted">Our Story</p>
+      <h2>Designed for modern heirloom wardrobes.</h2>
+      <p>
+        ME Luxury blends disciplined tailoring with expressive silhouettes, creating pieces that feel editorial in frame and effortless in movement.
+        Every collection is built to balance modern confidence with timeless wearability.
+      </p>
+      <p>
+        Our studio works with material-first design decisions, elevated finishing standards, and premium production partners to ensure each garment
+        delivers consistency across fit, comfort, and longevity.
+      </p>
+    </article>
+
+    <aside class="about-story about-story-side">
+      <p class="crumb muted">At A Glance</p>
+      <ul>
+        <li><span>Craft-Led Product Drops</span><strong>12 / year</strong></li>
+        <li><span>Average Design Iterations</span><strong>40+</strong></li>
+        <li><span>Premium Material Focus</span><strong>100%</strong></li>
+      </ul>
+    </aside>
+  </section>
+
+  <section class="about-values">
+    <article>
+      <h3>Quiet Luxury Code</h3>
+      <p>Refined contrast, controlled detailing, and an editorial attitude that avoids short-lived trends.</p>
+    </article>
+    <article>
+      <h3>Precision Construction</h3>
+      <p>Structured cuts, balanced proportions, and thoughtful finishing to maintain silhouette integrity over time.</p>
+    </article>
+    <article>
+      <h3>Client-First Experience</h3>
+      <p>From fit clarity to delivery confidence, every touchpoint is designed to feel premium and frictionless.</p>
+    </article>
+  </section>
+
+  <section class="about-craft-grid">
+    <article class="about-craft-card">
+      <p class="crumb muted">Craft Standards</p>
+      <h3>Built through disciplined details.</h3>
+      <ul>
+        <li><span>Material testing before release</span><strong>3-stage QC</strong></li>
+        <li><span>Silhouette balancing per design</span><strong>Fit Lab Approved</strong></li>
+        <li><span>Finish quality per garment</span><strong>Hand Checked</strong></li>
+      </ul>
+    </article>
+    <article class="about-craft-card">
+      <p class="crumb muted">Client Promise</p>
+      <h3>Luxury without friction.</h3>
+      <ul>
+        <li><span>Concierge support window</span><strong>7 Days</strong></li>
+        <li><span>Fast premium dispatch</span><strong>24-48 hrs</strong></li>
+        <li><span>Assisted returns process</span><strong>Simple & Guided</strong></li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="about-journal">
+    <div class="about-journal-head">
+      <p class="crumb muted">Journal</p>
+      <h2>Inside the ME luxury method.</h2>
+    </div>
+    <div class="about-journal-grid">
+      <article>
+        <h4>Concept to Pattern</h4>
+        <p>Each design begins with proportion sketches and material behavior studies to preserve structure and movement.</p>
+      </article>
+      <article>
+        <h4>Prototype to Fit Lab</h4>
+        <p>Multiple rounds of fittings refine shoulder lines, drape fall, and body balance before production approval.</p>
+      </article>
+      <article>
+        <h4>Final Edit Curation</h4>
+        <p>Only pieces meeting our visual and tactile benchmarks enter the seasonal editorial capsule.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="about-cta">
+    <h2>Enter the next chapter of ME Luxury.</h2>
+    <p>Explore the latest edit curated for elevated daily wear and statement evenings.</p>
+    <div>
+      <a class="btn btn-primary" href="/">Go to Home</a>
+      <a class="btn btn-outline" href="/contact">Talk to Concierge</a>
+    </div>
+  </section>
+</section>
+{% include "partials/shared_home_footer.html" %}
+{% endblock %}

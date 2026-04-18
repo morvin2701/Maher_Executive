@@ -1,0 +1,179 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-cpn-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>Promotions</h1>
+    <p class="muted">Manage discount codes and incentive campaigns.</p>
+  </div>
+  <button class="btn btn-primary btn-sm" id="new-campaign-btn">+ New Campaign</button>
+</section>
+
+<section class="admin-product-panel admin-cpn-panel">
+  <div class="admin-product-table-wrap">
+    <table class="admin-product-table admin-cpn-table">
+      <thead>
+        <tr>
+          <th>Promo Code</th>
+          <th>Incentive</th>
+          <th>Utilization</th>
+          <th>Expires</th>
+          <th>Current State</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="coupons-table-body">
+        <tr><td colspan="6" class="muted">Loading promotions...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = { all: [] };
+    const els = {
+      body: document.getElementById("coupons-table-body"),
+      newBtn: document.getElementById("new-campaign-btn"),
+    };
+
+    function fmtDate(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "Infinite";
+      return d.toISOString().slice(0, 10);
+    }
+    function incentive(c) {
+      if (String(c.type) === "fixed") return "₹" + Number(c.value || 0).toLocaleString("en-IN") + " (Fixed Amount)";
+      return Number(c.value || 0) + "% (Percentage)";
+    }
+    function usageText(c) {
+      const used = Number(c.usedCount || 0);
+      const lim = Number(c.usageLimit || 0);
+      if (!lim) return used + " Used";
+      return used + "/" + lim + " Used";
+    }
+    function usageWidth(c) {
+      const used = Number(c.usedCount || 0);
+      const lim = Number(c.usageLimit || 0);
+      if (!lim) return Math.min(100, used);
+      return Math.min(100, Math.round((used / lim) * 100));
+    }
+    function stateClass(st) {
+      if (st === "active") return "delivered";
+      if (st === "scheduled") return "shipped";
+      return "cancelled";
+    }
+
+    function render() {
+      if (!state.all.length) {
+        els.body.innerHTML = '<tr><td colspan="6" class="muted">No promotions found.</td></tr>';
+        return;
+      }
+      els.body.innerHTML = state.all
+        .map(
+          (c) =>
+            "<tr>" +
+            '<td><div class="admin-cpn-code"><span>◈</span><strong>' + (c.code || "") + "</strong></div></td>" +
+            "<td>" + incentive(c) + "</td>" +
+            '<td><div class="admin-cpn-usage"><p>' + usageText(c) + '</p><div class="admin-cpn-meter"><i style="width:' + usageWidth(c) + '%;"></i></div></div></td>' +
+            "<td>" + fmtDate(c.expiresAt) + "</td>" +
+            '<td><span class="admin-status ' + stateClass(c.status) + '">' + String(c.status || "active").toUpperCase() + "</span></td>" +
+            '<td><div class="admin-prod-actions">' +
+            '<button type="button" data-cycle="' + c.id + '">Cycle</button>' +
+            '<button type="button" data-delete="' + c.id + '">Delete</button>' +
+            "</div></td>" +
+            "</tr>"
+        )
+        .join("");
+
+      els.body.querySelectorAll("[data-cycle]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-cycle");
+          const row = state.all.find((x) => x.id === id);
+          if (!id || !row) return;
+          const flow = ["active", "scheduled", "expired"];
+          const idx = flow.indexOf(String(row.status || "active"));
+          const next = flow[(idx + 1) % flow.length];
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/coupons/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...h },
+            body: JSON.stringify({ status: next }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update campaign state.", "error");
+            return;
+          }
+          row.status = next;
+          render();
+        });
+      });
+
+      els.body.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-delete");
+          if (!id || !window.confirm("Delete this campaign?")) return;
+          const h = await window.getBearerHeaders();
+          const res = await fetch("/api/admin/coupons/" + encodeURIComponent(id), {
+            method: "DELETE",
+            headers: { ...h },
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not delete campaign.", "error");
+            return;
+          }
+          state.all = state.all.filter((x) => x.id !== id);
+          render();
+        });
+      });
+    }
+
+    async function load() {
+      const h = await window.getBearerHeaders();
+      const res = await fetch("/api/admin/coupons", { headers: { ...h } });
+      if (res.status === 401 || res.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+      const data = await res.json();
+      state.all = data.coupons || [];
+      render();
+    }
+
+    els.newBtn.addEventListener("click", async () => {
+      const code = window.prompt("Promo code (e.g. WINTER-EXP)");
+      if (!code) return;
+      const type = window.prompt("Type: percentage or fixed", "percentage");
+      const valueRaw = window.prompt("Value", "10");
+      const usageRaw = window.prompt("Usage limit", "100");
+      const expiresRaw = window.prompt("Expires at (YYYY-MM-DD) optional", "");
+      const body = {
+        code: code,
+        type: String(type || "percentage").toLowerCase().includes("fixed") ? "fixed" : "percentage",
+        value: Number(valueRaw || 0),
+        usageLimit: Number(usageRaw || 0),
+        status: "active",
+      };
+      if (expiresRaw) body.expiresAt = expiresRaw;
+      const h = await window.getBearerHeaders();
+      const res = await fetch("/api/admin/coupons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...h },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (window.showToast) window.showToast(err.error || "Could not create campaign.", "error");
+        return;
+      }
+      await load();
+      if (window.showToast) window.showToast("Campaign created.", "success");
+    });
+
+    await load();
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Your Bag — Maher Executive{% endblock %}
+{% block content %}
+<section class="cart-shell">
+  <div class="cart-header">
+    <h1>Your Bag <span id="cart-pieces">(0 Pieces)</span></h1>
+  </div>
+
+  <div class="cart-layout">
+    <section>
+      <div id="cart-items" class="cart-items"></div>
+      <div id="cart-empty" class="cart-empty" style="display:none;">
+        <p>Your bag is currently empty.</p>
+        <a class="btn btn-outline" href="/women">Continue Shopping</a>
+      </div>
+    </section>
+
+    <aside class="cart-summary">
+      <h3>Order Summary</h3>
+      <div class="cart-summary-row"><span>Subtotal</span><strong id="sum-subtotal">₹0.00</strong></div>
+      <div class="cart-summary-row"><span>Shipping</span><strong id="sum-shipping">₹0.00</strong></div>
+      <div class="cart-summary-row"><span>Tax Estimate</span><strong id="sum-tax">₹0.00</strong></div>
+      <div class="cart-summary-row cart-summary-discount" id="sum-discount-row" style="display:none;"><span>Promo Discount</span><strong id="sum-discount">-₹0.00</strong></div>
+      <div class="cart-summary-total"><span>Total</span><strong id="sum-total">₹0.00</strong></div>
+      <a id="cart-checkout-btn" class="btn btn-primary cart-checkout-btn" href="/checkout">Secure Checkout →</a>
+    </aside>
+  </div>
+
+  <section class="cart-promo">
+    <p>Promo Code or Gift Card</p>
+    <div>
+      <input id="promo-code" placeholder="Enter code" />
+      <button id="promo-apply" class="btn btn-outline" type="button">Apply</button>
+    </div>
+  </section>
+</section>
+
+{% include "partials/shared_home_footer.html" %}
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const state = {
+      products: {},
+      cart: {},
+      discount: 0,
+    };
+
+    const els = {
+      items: document.getElementById("cart-items"),
+      empty: document.getElementById("cart-empty"),
+      pieces: document.getElementById("cart-pieces"),
+      subtotal: document.getElementById("sum-subtotal"),
+      shipping: document.getElementById("sum-shipping"),
+      tax: document.getElementById("sum-tax"),
+      discountRow: document.getElementById("sum-discount-row"),
+      discount: document.getElementById("sum-discount"),
+      total: document.getElementById("sum-total"),
+      checkoutBtn: document.getElementById("cart-checkout-btn"),
+      promoCode: document.getElementById("promo-code"),
+      promoApply: document.getElementById("promo-apply"),
+    };
+
+    function fmt(value) {
+      return "₹" + Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function saveCart() {
+      localStorage.setItem("cart", JSON.stringify(state.cart));
+    }
+
+    function getLineTotal(productId) {
+      const p = state.products[productId];
+      const qty = Number(state.cart[productId] || 0);
+      if (!p || qty <= 0) return 0;
+      return Number(p.price || 0) * qty;
+    }
+
+    function computeTotals() {
+      const ids = Object.keys(state.cart);
+      let pieces = 0;
+      let subtotal = 0;
+      ids.forEach((id) => {
+        const qty = Number(state.cart[id] || 0);
+        if (qty <= 0) return;
+        pieces += qty;
+        subtotal += getLineTotal(id);
+      });
+      const shipping = subtotal > 0 && subtotal < 2999 ? 99 : 0;
+      const tax = subtotal * 0.18;
+      const discount = Math.min(state.discount, subtotal);
+      const total = Math.max(0, subtotal + shipping + tax - discount);
+      return { pieces, subtotal, shipping, tax, discount, total };
+    }
+
+    function setQty(productId, nextQty) {
+      if (nextQty <= 0) delete state.cart[productId];
+      else state.cart[productId] = nextQty;
+      saveCart();
+      render();
+    }
+
+    function renderItems() {
+      const ids = Object.keys(state.cart).filter((id) => Number(state.cart[id]) > 0);
+      els.items.innerHTML = "";
+      if (!ids.length) return;
+
+      ids.forEach((id) => {
+        const p = state.products[id];
+        if (!p) return;
+        const qty = Number(state.cart[id] || 1);
+        const img = (p.images && p.images[0] && p.images[0].url) || "";
+        const row = document.createElement("article");
+        row.className = "cart-item";
+        row.innerHTML =
+          '<div class="cart-item-left">' +
+          (img ? '<img src="' + img + '" alt="' + (p.name || "") + '" loading="lazy" />' : "") +
+          '<div class="cart-item-copy">' +
+          "<h4>" + (p.name || "Product") + "</h4>" +
+          '<p class="cart-item-sku">SKU: ' + (p.id || "") + "</p>" +
+          '<p class="cart-item-meta"><span>Color</span> Onyx <span>Size</span> XS</p>' +
+          '<div class="cart-qty" data-id="' + id + '">' +
+          '<button type="button" data-action="dec">−</button>' +
+          "<span>" + qty + "</span>" +
+          '<button type="button" data-action="inc">+</button>' +
+          "</div>" +
+          "</div></div>" +
+          '<div class="cart-item-right">' +
+          '<button class="cart-remove" type="button" data-remove="' + id + '" aria-label="Remove item">🗑</button>' +
+          "<strong>" + fmt(getLineTotal(id)) + "</strong>" +
+          "</div>";
+        els.items.appendChild(row);
+      });
+
+      els.items.querySelectorAll(".cart-qty button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const wrap = btn.closest(".cart-qty");
+          const id = wrap ? wrap.getAttribute("data-id") : "";
+          if (!id) return;
+          const current = Number(state.cart[id] || 1);
+          const action = btn.getAttribute("data-action");
+          if (action === "inc") setQty(id, current + 1);
+          else setQty(id, current - 1);
+        });
+      });
+
+      els.items.querySelectorAll("[data-remove]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-remove");
+          if (!id) return;
+          delete state.cart[id];
+          saveCart();
+          render();
+        });
+      });
+    }
+
+    function renderSummary() {
+      const totals = computeTotals();
+      els.pieces.textContent = "(" + totals.pieces + " Pieces)";
+      els.subtotal.textContent = fmt(totals.subtotal);
+      els.shipping.textContent = totals.shipping === 0 ? "Complimentary" : fmt(totals.shipping);
+      els.tax.textContent = fmt(totals.tax);
+      if (totals.discount > 0) {
+        els.discountRow.style.display = "";
+        els.discount.textContent = "-" + fmt(totals.discount);
+      } else {
+        els.discountRow.style.display = "none";
+      }
+      els.total.textContent = fmt(totals.total);
+      const hasItems = totals.pieces > 0;
+      els.checkoutBtn.classList.toggle("is-disabled", !hasItems);
+      els.checkoutBtn.setAttribute("aria-disabled", hasItems ? "false" : "true");
+    }
+
+    function render() {
+      const hasItems = Object.keys(state.cart).some((id) => Number(state.cart[id]) > 0 && state.products[id]);
+      els.empty.style.display = hasItems ? "none" : "";
+      els.items.style.display = hasItems ? "" : "none";
+      renderItems();
+      renderSummary();
+    }
+
+    els.checkoutBtn.addEventListener("click", (e) => {
+      if (els.checkoutBtn.getAttribute("aria-disabled") === "true") {
+        e.preventDefault();
+        if (window.showToast) window.showToast("Your bag is empty.", "warning");
+      }
+    });
+
+    els.promoApply.addEventListener("click", () => {
+      const code = String(els.promoCode.value || "").trim().toUpperCase();
+      const subtotal = computeTotals().subtotal;
+      if (!code) {
+        if (window.showToast) window.showToast("Enter promo code first.", "warning");
+        return;
+      }
+      if (code === "MAHER10") {
+        state.discount = Math.min(Math.round(subtotal * 0.1), 500);
+        if (window.showToast) window.showToast("Promo applied: MAHER10", "success");
+      } else {
+        state.discount = 0;
+        if (window.showToast) window.showToast("Invalid promo code.", "error");
+      }
+      renderSummary();
+    });
+
+    try {
+      state.cart = JSON.parse(localStorage.getItem("cart") || "{}");
+    } catch (_e) {
+      state.cart = {};
+    }
+
+    try {
+      const res = await fetch("/api/products?limit=500");
+      const data = await res.json();
+      (data.products || []).forEach((p) => {
+        state.products[p.id] = p;
+      });
+    } catch (_err) {
+      if (window.showToast) window.showToast("Unable to load bag items.", "warning");
+    }
+
+    render();
+  })();
+</script>
+{% endblock %}

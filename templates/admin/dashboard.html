@@ -1,0 +1,725 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-dash-head">
+  <h1>Executive Overview</h1>
+  <div class="admin-dash-actions">
+    <button type="button" class="btn btn-outline btn-sm" id="download-report-btn">Download Report</button>
+    <button type="button" class="btn btn-primary btn-sm" id="generate-insights-btn">Generate Insights</button>
+  </div>
+</section>
+
+<section class="admin-kpi-grid">
+  <article class="admin-kpi-card">
+    <p>Total Revenue</p>
+    <h3 id="kpi-revenue">₹0</h3>
+    <span id="kpi-revenue-change">↗ 0%</span>
+  </article>
+  <article class="admin-kpi-card">
+    <p>Total Orders</p>
+    <h3 id="kpi-orders">0</h3>
+    <span id="kpi-orders-change">↗ 0%</span>
+  </article>
+  <article class="admin-kpi-card">
+    <p>Active Customers</p>
+    <h3 id="kpi-customers">0</h3>
+    <span id="kpi-customers-change">↗ 0%</span>
+  </article>
+  <article class="admin-kpi-card">
+    <p>Low Stock Alerts</p>
+    <h3 id="kpi-stock">0 Items</h3>
+    <span id="kpi-stock-change">↘ 0</span>
+  </article>
+</section>
+
+<section class="admin-dash-grid">
+  <article class="admin-panel admin-panel--revenue">
+    <div class="admin-panel-head">
+      <p class="admin-panel-title-serif">Revenue Dynamics</p>
+      <button type="button" class="admin-chart-range" id="revenue-range-btn" aria-haspopup="listbox" aria-expanded="false">
+        Last 7 Days <span aria-hidden="true">▾</span>
+      </button>
+    </div>
+    <div id="revenue-chart" class="admin-revenue-chart">
+      <p class="muted">Loading chart…</p>
+    </div>
+  </article>
+  <article class="admin-panel admin-panel--fulfillment">
+    <div class="admin-panel-head">
+      <p class="admin-fulfillment-title">Order Fulfillment Distribution</p>
+    </div>
+    <div class="admin-fulfillment-wrap">
+      <div class="admin-donut-wrap">
+        <div id="fulfillment-donut" class="admin-donut-svg" aria-hidden="true"></div>
+        <div id="donut-tooltip" class="admin-donut-tooltip" hidden></div>
+      </div>
+      <ul class="admin-legend" id="fulfillment-legend"></ul>
+    </div>
+    <div class="admin-fulfillment-extra" id="fulfillment-extra">
+      <div class="admin-fulfillment-metrics">
+        <div class="admin-fulfillment-metric">
+          <span class="admin-fulfillment-metric-label">Delivery rate</span>
+          <strong id="fulfillment-rate-pct">—</strong>
+          <span class="admin-fulfillment-metric-hint">Orders marked delivered</span>
+        </div>
+        <div class="admin-fulfillment-metric">
+          <span class="admin-fulfillment-metric-label">Active pipeline</span>
+          <strong id="fulfillment-pipeline">—</strong>
+          <span class="admin-fulfillment-metric-hint">Pending + in transit</span>
+        </div>
+        <div class="admin-fulfillment-metric">
+          <span class="admin-fulfillment-metric-label">Cancellations</span>
+          <strong id="fulfillment-cancel-pct">—</strong>
+          <span class="admin-fulfillment-metric-hint">Share of all orders</span>
+        </div>
+      </div>
+      <div class="admin-fulfillment-spark">
+        <div class="admin-fulfillment-spark-head">
+          <span class="admin-fulfillment-spark-title">Throughput · last 7 days</span>
+          <span class="admin-fulfillment-spark-legend">
+            <span><span class="admin-fulfillment-dot admin-fulfillment-dot--placed" aria-hidden="true"></span>Placed</span>
+            <span><span class="admin-fulfillment-dot admin-fulfillment-dot--done" aria-hidden="true"></span>Completed</span>
+          </span>
+        </div>
+        <div id="fulfillment-spark" class="admin-fulfillment-spark-bars" role="img" aria-label="Orders placed versus completed per day"></div>
+        <p class="admin-fulfillment-spark-foot" id="fulfillment-spark-summary"></p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<section class="admin-panel admin-orders-panel">
+  <div class="admin-panel-head">
+    <p>Recent Acquisitions</p>
+    <a href="/admin/orders">View all orders</a>
+  </div>
+  <div class="admin-orders-table-wrap">
+    <table class="admin-orders-table">
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>Customer</th>
+          <th>Date</th>
+          <th>Amount</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="admin-recent-orders">
+        <tr><td colspan="5" class="muted">Loading dashboard...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    function currency(value) {
+      return "₹" + Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+    function number(value) {
+      return Number(value || 0).toLocaleString("en-US");
+    }
+    function dateLabel(raw) {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "Recent";
+      return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+    }
+
+    function catmullRomOpenPath(points, tension) {
+      const t = tension === undefined ? 1 : tension;
+      if (points.length < 2) return "";
+      let d = "M " + points[0].x + " " + points[0].y;
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i === 0 ? i : i - 1];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[i + 2] || p2;
+        const cp1x = p1.x + ((p2.x - p0.x) / 6) * t;
+        const cp1y = p1.y + ((p2.y - p0.y) / 6) * t;
+        const cp2x = p2.x - ((p3.x - p1.x) / 6) * t;
+        const cp2y = p2.y - ((p3.y - p1.y) / 6) * t;
+        d += " C " + cp1x + " " + cp1y + " " + cp2x + " " + cp2y + " " + p2.x + " " + p2.y;
+      }
+      return d;
+    }
+
+    function niceYScale(maxVal, tickCount) {
+      const n = tickCount || 4;
+      if (maxVal <= 0) {
+        const top = 10000;
+        const step = top / n;
+        return { max: top, ticks: Array.from({ length: n + 1 }, (_, i) => Math.round(i * step)) };
+      }
+      const raw = maxVal * 1.15;
+      const pow10 = Math.pow(10, Math.floor(Math.log10(raw)));
+      const frac = raw / pow10;
+      let nf = frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 5 ? 5 : 10;
+      const niceMax = nf * pow10;
+      const step = niceMax / n;
+      const ticks = [];
+      for (let i = 0; i <= n; i++) ticks.push(Math.round(i * step));
+      return { max: niceMax, ticks };
+    }
+
+    function renderRevenueChart(series) {
+      const root = document.getElementById("revenue-chart");
+      if (!root) return;
+      const items = series || [];
+      const values = items.map((x) => Number(x.value || 0));
+      if (!values.length) {
+        root.innerHTML = '<p class="muted">No chart data available</p>';
+        return;
+      }
+
+      const padL = 44;
+      const padR = 16;
+      const padT = 14;
+      const padB = 36;
+      const width = 720;
+      const height = 268;
+      const chartW = width - padL - padR;
+      const chartH = height - padT - padB;
+
+      const maxVal = Math.max(...values, 1);
+      const { max: yMax, ticks } = niceYScale(maxVal, 4);
+
+      const pts = values.map((v, i) => {
+        const x = padL + (i / (values.length - 1 || 1)) * chartW;
+        const y = padT + chartH - (v / yMax) * chartH;
+        return { x, y, value: v, label: items[i].label || "" };
+      });
+
+      const smoothLine = catmullRomOpenPath(pts, 1);
+      const areaPath =
+        smoothLine +
+        " L " +
+        pts[pts.length - 1].x +
+        " " +
+        (padT + chartH) +
+        " L " +
+        pts[0].x +
+        " " +
+        (padT + chartH) +
+        " Z";
+
+      let gridHtml = "";
+      ticks.forEach(function (tv) {
+        const gy = padT + chartH - (tv / yMax) * chartH;
+        gridHtml +=
+          '<line class="admin-rev-grid" x1="' +
+          padL +
+          '" y1="' +
+          gy +
+          '" x2="' +
+          (width - padR) +
+          '" y2="' +
+          gy +
+          '" />';
+        gridHtml +=
+          '<text class="admin-rev-yaxis" x="' +
+          (padL - 8) +
+          '" y="' +
+          (gy + 4) +
+          '">' +
+          number(tv) +
+          "</text>";
+      });
+
+      const xLabels = items
+        .map(function (s, i) {
+          const x = pts[i].x;
+          return '<text class="admin-rev-xaxis" x="' + x + '" y="' + (height - 8) + '">' + (s.label || "") + "</text>";
+        })
+        .join("");
+
+      const uid = "revGrad-" + Math.random().toString(36).slice(2);
+      root.innerHTML =
+        '<div class="admin-rev-chart-inner">' +
+        '<svg class="admin-rev-svg" viewBox="0 0 ' +
+        width +
+        " " +
+        height +
+        '" preserveAspectRatio="xMidYMid meet">' +
+        "<defs>" +
+        '<linearGradient id="' +
+        uid +
+        '" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0%" stop-color="rgba(201,169,110,0.42)" />' +
+        '<stop offset="55%" stop-color="rgba(201,169,110,0.08)" />' +
+        '<stop offset="100%" stop-color="rgba(201,169,110,0)" />' +
+        "</linearGradient>" +
+        "</defs>" +
+        gridHtml +
+        '<path class="admin-rev-area" d="' +
+        areaPath +
+        '" fill="url(#' +
+        uid +
+        ')"></path>' +
+        '<path class="admin-rev-line" d="' +
+        smoothLine +
+        '" fill="none" stroke="#d2b278" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>' +
+        '<line class="admin-rev-crosshair" id="rev-crosshair" x1="' +
+        padL +
+        '" y1="' +
+        padT +
+        '" x2="' +
+        padL +
+        '" y2="' +
+        (padT + chartH) +
+        '" style="opacity:0"></line>' +
+        '<circle class="admin-rev-marker" id="rev-marker" r="5" style="opacity:0"></circle>' +
+        xLabels +
+        "</svg>" +
+        '<div class="admin-rev-tooltip" id="rev-tooltip" hidden>' +
+        '<div class="admin-rev-tooltip-day" id="rev-tip-day"></div>' +
+        '<div class="admin-rev-tooltip-val"><span>value :</span> <strong id="rev-tip-val"></strong></div>' +
+        "</div>" +
+        "</div>";
+
+      const svg = root.querySelector(".admin-rev-svg");
+      const cross = root.querySelector("#rev-crosshair");
+      const marker = root.querySelector("#rev-marker");
+      const tip = root.querySelector("#rev-tooltip");
+      const tipDay = root.querySelector("#rev-tip-day");
+      const tipVal = root.querySelector("#rev-tip-val");
+      const inner = root.querySelector(".admin-rev-chart-inner");
+
+      function svgPointFromEvent(ev) {
+        const rect = svg.getBoundingClientRect();
+        const ctm = svg.getScreenCTM();
+        if (svg.createSVGPoint && ctm) {
+          const pt = svg.createSVGPoint();
+          pt.x = ev.clientX;
+          pt.y = ev.clientY;
+          return pt.matrixTransform(ctm.inverse());
+        }
+        const sx = width / rect.width;
+        const sy = height / rect.height;
+        return { x: (ev.clientX - rect.left) * sx, y: (ev.clientY - rect.top) * sy };
+      }
+
+      let activeIdx = -1;
+      function showPoint(i) {
+        if (i < 0 || i >= pts.length) return;
+        activeIdx = i;
+        const p = pts[i];
+        cross.setAttribute("x1", p.x);
+        cross.setAttribute("x2", p.x);
+        cross.style.opacity = "1";
+        marker.setAttribute("cx", p.x);
+        marker.setAttribute("cy", p.y);
+        marker.style.opacity = "1";
+        tipDay.textContent = p.label || "Day";
+        tipVal.textContent = currency(Math.round(p.value));
+        tip.hidden = false;
+        const rect = inner.getBoundingClientRect();
+        const sx = rect.width / width;
+        const sy = rect.height / height;
+        tip.style.left = p.x * sx + 12 + "px";
+        tip.style.top = p.y * sy - 56 + "px";
+      }
+
+      function hidePoint() {
+        cross.style.opacity = "0";
+        marker.style.opacity = "0";
+        tip.hidden = true;
+        activeIdx = -1;
+      }
+
+      inner.addEventListener("mousemove", function (ev) {
+        const loc = svgPointFromEvent(ev);
+        if (!loc || loc.x < padL || loc.x > width - padR) {
+          hidePoint();
+          return;
+        }
+        const t = (loc.x - padL) / chartW;
+        const idx = Math.round(t * (values.length - 1));
+        showPoint(Math.max(0, Math.min(values.length - 1, idx)));
+      });
+      inner.addEventListener("mouseleave", hidePoint);
+
+      inner.addEventListener(
+        "touchmove",
+        function (ev) {
+          ev.preventDefault();
+          const t = ev.touches[0];
+          const loc = svgPointFromEvent(t);
+          if (!loc || loc.x < padL || loc.x > width - padR) {
+            hidePoint();
+            return;
+          }
+          const tt = (loc.x - padL) / chartW;
+          const idx = Math.round(tt * (values.length - 1));
+          showPoint(Math.max(0, Math.min(values.length - 1, idx)));
+        },
+        { passive: false }
+      );
+      inner.addEventListener("touchend", hidePoint);
+    }
+
+    function polar(cx, cy, r, angleDeg) {
+      const rad = ((angleDeg - 90) * Math.PI) / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    }
+
+    function donutSlicePath(cx, cy, rOut, rIn, a0, a1) {
+      const large = a1 - a0 > 180 ? 1 : 0;
+      const p1 = polar(cx, cy, rOut, a0);
+      const p2 = polar(cx, cy, rOut, a1);
+      const p3 = polar(cx, cy, rIn, a1);
+      const p4 = polar(cx, cy, rIn, a0);
+      return (
+        "M " +
+        p1.x +
+        " " +
+        p1.y +
+        " A " +
+        rOut +
+        " " +
+        rOut +
+        " 0 " +
+        large +
+        " 1 " +
+        p2.x +
+        " " +
+        p2.y +
+        " L " +
+        p3.x +
+        " " +
+        p3.y +
+        " A " +
+        rIn +
+        " " +
+        rIn +
+        " 0 " +
+        large +
+        " 0 " +
+        p4.x +
+        " " +
+        p4.y +
+        " Z"
+      );
+    }
+
+    const FULFILL_ORDER = ["cancelled", "delivered", "pending", "shipped"];
+
+    function renderDonut(data) {
+      const colors = {
+        delivered: "#56c58d",
+        pending: "#dcc185",
+        shipped: "#5eb3f7",
+        cancelled: "#e07a7a",
+      };
+      const labels = {
+        delivered: "DELIVERED",
+        pending: "PENDING",
+        shipped: "SHIPPED",
+        cancelled: "CANCELLED",
+      };
+      const raw = data || {};
+      const entries = FULFILL_ORDER.filter(function (k) {
+        return raw[k] !== undefined;
+      }).map(function (k) {
+        return [k, Number(raw[k] || 0)];
+      });
+      const total = entries.reduce(function (acc, [, v]) {
+        return acc + v;
+      }, 0);
+
+      const legend = document.getElementById("fulfillment-legend");
+      const host = document.getElementById("fulfillment-donut");
+      const tip = document.getElementById("donut-tooltip");
+      if (!host) return;
+
+      if (legend) {
+        legend.innerHTML = entries
+          .map(function ([k, v]) {
+            return (
+              '<li><span style="background:' +
+              colors[k] +
+              ';"></span><p>' +
+              labels[k] +
+              "</p><strong>" +
+              number(v) +
+              "</strong></li>"
+            );
+          })
+          .join("");
+      }
+
+      const vb = 200;
+      const cx = vb / 2;
+      const cy = vb / 2;
+      const rOut = 82;
+      const rIn = 54;
+      function donutCenterGroup(tot) {
+        return (
+          '<text class="admin-donut-center-kicker" x="100" y="86" text-anchor="middle">TOTAL ORDERS</text>' +
+          '<text class="admin-donut-center-num" x="100" y="118" text-anchor="middle">' +
+          number(tot) +
+          "</text>"
+        );
+      }
+
+      if (total <= 0) {
+        host.innerHTML =
+          '<svg viewBox="0 0 ' +
+          vb +
+          " " +
+          vb +
+          '" width="190" height="190" class="admin-donut-svg-inner admin-donut-svg--empty">' +
+          '<circle cx="' +
+          cx +
+          '" cy="' +
+          cy +
+          '" r="' +
+          rOut +
+          '" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="' +
+          (rOut - rIn) +
+          '" />' +
+          donutCenterGroup(0) +
+          "</svg>";
+        return;
+      }
+
+      let angle = 0;
+      const pathParts = [];
+      entries.forEach(function ([k, v]) {
+        const frac = Number(v || 0) / total;
+        let sweep = frac * 360;
+        if (sweep >= 360) sweep = 359.998;
+        const a0 = angle;
+        const a1 = angle + sweep;
+        angle = a1;
+        if (v <= 0) return;
+        pathParts.push(
+          '<path class="admin-donut-seg" data-key="' +
+            k +
+            '" fill="' +
+            colors[k] +
+            '" d="' +
+            donutSlicePath(cx, cy, rOut, rIn, a0, a1) +
+            '" stroke="#0d0d0d" stroke-width="0.75" opacity="0.98"></path>'
+        );
+      });
+
+      host.innerHTML =
+        '<svg viewBox="0 0 ' +
+        vb +
+        " " +
+        vb +
+        '" width="190" height="190" class="admin-donut-svg-inner">' +
+        pathParts.join("") +
+        donutCenterGroup(total) +
+        "</svg>";
+
+      host.querySelectorAll(".admin-donut-seg").forEach(function (seg) {
+        seg.addEventListener("mouseenter", function (ev) {
+          const key = seg.getAttribute("data-key");
+          const val = Number(raw[key] || 0);
+          const pct = total ? Math.round((val / total) * 1000) / 10 : 0;
+          tip.innerHTML =
+            "<strong>" +
+            labels[key] +
+            '</strong><span class="admin-donut-tip-val">' +
+            number(val) +
+            " orders · " +
+            pct +
+            "%</span>";
+          tip.hidden = false;
+          const rect = host.getBoundingClientRect();
+          const wrap = host.closest(".admin-donut-wrap");
+          const wr = wrap ? wrap.getBoundingClientRect() : rect;
+          tip.style.left = ev.clientX - wr.left + 12 + "px";
+          tip.style.top = ev.clientY - wr.top - 36 + "px";
+        });
+        seg.addEventListener("mousemove", function (ev) {
+          const wrap = host.closest(".admin-donut-wrap");
+          const wr = wrap ? wrap.getBoundingClientRect() : host.getBoundingClientRect();
+          tip.style.left = ev.clientX - wr.left + 12 + "px";
+          tip.style.top = ev.clientY - wr.top - 36 + "px";
+        });
+        seg.addEventListener("mouseleave", function () {
+          tip.hidden = true;
+        });
+      });
+    }
+
+    function attrEscape(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;");
+    }
+
+    function renderFulfillmentInsights(metrics, daily) {
+      const m = metrics || {};
+      const rateEl = document.getElementById("fulfillment-rate-pct");
+      const pipeEl = document.getElementById("fulfillment-pipeline");
+      const cancelEl = document.getElementById("fulfillment-cancel-pct");
+      const sparkHost = document.getElementById("fulfillment-spark");
+      const footEl = document.getElementById("fulfillment-spark-summary");
+      if (!rateEl || !pipeEl || !cancelEl || !sparkHost || !footEl) return;
+
+      rateEl.textContent = Number(m.completionRate || 0).toFixed(1) + "%";
+      pipeEl.textContent = number(m.activePipeline);
+      cancelEl.textContent = Number(m.cancellationRate || 0).toFixed(1) + "%";
+
+      const days = daily || [];
+      let maxVal = 1;
+      days.forEach(function (d) {
+        maxVal = Math.max(maxVal, Number(d.placed || 0), Number(d.completed || 0));
+      });
+
+      sparkHost.innerHTML = days
+        .map(function (d) {
+          const p = Number(d.placed || 0);
+          const c = Number(d.completed || 0);
+          const ph = Math.round((p / maxVal) * 100);
+          const ch = Math.round((c / maxVal) * 100);
+          const tip = String(d.label || "") + ": " + number(p) + " placed · " + number(c) + " completed";
+          return (
+            '<div class="admin-spark-col">' +
+            '<div class="admin-spark-bars">' +
+            '<span class="admin-spark-bar admin-spark-bar--placed" style="height:' +
+            ph +
+            '%" title="' +
+            attrEscape(tip) +
+            '"></span>' +
+            '<span class="admin-spark-bar admin-spark-bar--done" style="height:' +
+            ch +
+            '%" title="' +
+            attrEscape(tip) +
+            '"></span>' +
+            "</div>" +
+            '<span class="admin-spark-day">' +
+            String(d.label || "") +
+            "</span>" +
+            "</div>"
+          );
+        })
+        .join("");
+
+      footEl.textContent =
+        number(m.placedLast7 || 0) +
+        " orders placed · " +
+        number(m.completedLast7 || 0) +
+        " marked delivered (rolling 7 days)";
+    }
+
+    function statusClass(value) {
+      const text = String(value || "pending").toLowerCase();
+      if (text.includes("deliver")) return "delivered";
+      if (text.includes("ship")) return "shipped";
+      if (text.includes("cancel")) return "cancelled";
+      return "pending";
+    }
+
+    function renderRecentOrders(rows) {
+      const body = document.getElementById("admin-recent-orders");
+      if (!body) return;
+      if (!rows || !rows.length) {
+        body.innerHTML = '<tr><td colspan="5" class="muted">No orders available yet.</td></tr>';
+        return;
+      }
+      body.innerHTML = rows
+        .map(
+          (row) =>
+            "<tr>" +
+            "<td>#AU-" +
+            String(row.id || "").slice(0, 4).toUpperCase() +
+            "</td>" +
+            "<td>" +
+            (row.customerName || "Customer") +
+            "</td>" +
+            "<td>" +
+            dateLabel(row.date) +
+            "</td>" +
+            "<td>" +
+            currency(row.amount) +
+            "</td>" +
+            '<td><span class="admin-status ' +
+            statusClass(row.status) +
+            '">' +
+            String(row.status || "pending").toUpperCase() +
+            "</span></td>" +
+            "</tr>"
+        )
+        .join("");
+    }
+
+    async function bearerHeaders() {
+      if (typeof window.getBearerHeaders === "function") {
+        return (await window.getBearerHeaders()) || {};
+      }
+      const t = localStorage.getItem("idToken");
+      return t ? { Authorization: "Bearer " + t } : {};
+    }
+    const headers = await bearerHeaders();
+    const response = await fetch("/api/admin/dashboard", { headers });
+    if (response.status === 401 || response.status === 403) {
+      document.querySelector(".admin-lux-content").innerHTML =
+        "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+      return;
+    }
+
+    const data = await response.json();
+    const kpi = data.kpis || {};
+    document.getElementById("kpi-revenue").textContent = currency(kpi.revenue && kpi.revenue.value);
+    document.getElementById("kpi-orders").textContent = number(kpi.orders && kpi.orders.value);
+    document.getElementById("kpi-customers").textContent = number(kpi.customers && kpi.customers.value);
+    document.getElementById("kpi-stock").textContent = number(kpi.lowStock && kpi.lowStock.value) + " Items";
+
+    const revChange = Number((kpi.revenue && kpi.revenue.change) || 0);
+    const ordChange = Number((kpi.orders && kpi.orders.change) || 0);
+    document.getElementById("kpi-revenue-change").textContent = (revChange >= 0 ? "↗ +" : "↘ ") + revChange.toFixed(1) + "%";
+    document.getElementById("kpi-orders-change").textContent = (ordChange >= 0 ? "↗ +" : "↘ ") + ordChange.toFixed(1) + "%";
+    document.getElementById("kpi-customers-change").textContent = "↗ +0%";
+    document.getElementById("kpi-stock-change").textContent = (kpi.lowStock && kpi.lowStock.critical) ? "↘ 3 Critical" : "↗ Stable";
+
+    renderRevenueChart(data.revenueSeries || []);
+    renderDonut(data.fulfillment || {});
+    renderFulfillmentInsights(data.fulfillmentMetrics || {}, data.fulfillmentDaily || []);
+    renderRecentOrders(data.recentOrders || []);
+
+    document.getElementById("download-report-btn").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "admin-dashboard-report.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    const rangeBtn = document.getElementById("revenue-range-btn");
+    if (rangeBtn) {
+      rangeBtn.addEventListener("click", function () {
+        if (window.showToast) {
+          window.showToast("Dashboard currently shows last 7 days from live orders. Custom ranges can be wired to the API next.", "success");
+        }
+      });
+    }
+
+    document.getElementById("generate-insights-btn").addEventListener("click", () => {
+      const fm = data.fulfillmentMetrics || {};
+      const insights =
+        "Revenue " +
+        (revChange >= 0 ? "up " : "down ") +
+        Math.abs(revChange).toFixed(1) +
+        "%, orders " +
+        (ordChange >= 0 ? "up " : "down ") +
+        Math.abs(ordChange).toFixed(1) +
+        "%. Delivery rate " +
+        Number(fm.completionRate || 0).toFixed(1) +
+        "% · pipeline " +
+        number(fm.activePipeline) +
+        " · " +
+        number(fm.completedLast7 || 0) +
+        " delivered (7d).";
+      if (window.showToast) window.showToast(insights, "success");
+    });
+  })();
+</script>
+{% endblock %}

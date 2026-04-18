@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Shop — ME Clothing{% endblock %}
+{% block content %}
+<section class="shop-shell">
+  <p class="muted crumb"><a href="/">Home</a> / Shop</p>
+  <h1 class="section-title" style="margin-top:0.2rem;">{{ page_content.title }}</h1>
+  <p class="muted" style="max-width:58ch;margin-top:-0.6rem;">
+    {{ page_content.subtitle }}
+  </p>
+  <ul class="content-points" style="margin-top:0.25rem;">
+    {% for item in page_content.highlights %}
+      <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  <div id="shop-grid" class="product-grid"></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const root = document.getElementById("shop-grid");
+    const params = new URLSearchParams(window.location.search);
+    const cat = params.get("category");
+    let url = "/api/products?limit=100";
+    if (cat) url += "&category=" + encodeURIComponent(cat);
+    const res = await fetch(url);
+    const data = await res.json();
+    root.innerHTML = "";
+    (data.products || []).forEach((p) => {
+      const img = (p.images && p.images[0] && p.images[0].url) || "";
+      const el = document.createElement("article");
+      el.className = "card-product";
+      el.innerHTML =
+        '<a href="/product/' + encodeURIComponent(p.slug) + '">' +
+        (img ? '<img src="' + img + '" alt="" loading="lazy" />' : "") +
+        '<div class="card-body"><h3 style="font-family:var(--font-display);font-size:1.05rem;margin:0 0 0.5rem;">' +
+        (p.name || "") +
+        "</h3>" +
+        '<p class="price-row"><span>₹' +
+        (p.price || 0) +
+        "</span>" +
+        (p.comparePrice ? '<span class="price-compare">₹' + p.comparePrice + "</span>" : "") +
+        "</p></div></a>";
+      root.appendChild(el);
+    });
+    if (!(data.products && data.products.length)) {
+      root.innerHTML = '<p class="muted">No products match your filters.</p>';
+    }
+  })();
+</script>
+{% endblock %}

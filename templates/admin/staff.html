@@ -1,0 +1,291 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<section class="admin-staff-head">
+  <div>
+    <p class="admin-eyebrow">Management Suite</p>
+    <h1>{{ page_content.title }}</h1>
+    <p class="muted admin-staff-sub">{{ page_content.subtitle }}</p>
+  </div>
+  <button type="button" class="btn btn-primary btn-sm admin-staff-provision" id="staff-provision-btn">
+    <span class="admin-staff-provision-ic" aria-hidden="true">+</span> Provision Account
+  </button>
+</section>
+
+<section class="admin-product-panel admin-staff-panel">
+  <div class="admin-staff-card-head">
+    <div class="admin-staff-card-title">
+      <span class="admin-staff-hex" aria-hidden="true">⬡</span>
+      <h2>Authorized Personnel</h2>
+    </div>
+    <p class="admin-staff-seats"><span id="staff-seat-count">0</span> Active Seats</p>
+  </div>
+  <div class="admin-product-table-wrap admin-staff-table-wrap">
+    <table class="admin-product-table admin-staff-table">
+      <thead>
+        <tr>
+          <th>Employee Profile</th>
+          <th>Clearance Level</th>
+          <th>Current Status</th>
+          <th>Last Telemetry</th>
+          <th>Security Actions</th>
+        </tr>
+      </thead>
+      <tbody id="staff-table-body">
+        <tr><td colspan="5" class="muted">Loading personnel from Firebase...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  async function bearerHeaders() {
+    if (typeof window.getBearerHeaders === "function") {
+      return (await window.getBearerHeaders()) || {};
+    }
+    var t = localStorage.getItem("idToken");
+    return t ? { Authorization: "Bearer " + t } : {};
+  }
+
+  var body = document.getElementById("staff-table-body");
+  var seatsEl = document.getElementById("staff-seat-count");
+  var provisionBtn = document.getElementById("staff-provision-btn");
+  var state = { rows: [] };
+
+  function initials(name) {
+    var parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "•";
+    return parts
+      .slice(0, 2)
+      .map(function (x) {
+        return x[0].toUpperCase();
+      })
+      .join("");
+  }
+
+  function tagClassFromServer(row) {
+    return row.clearanceTagClass || "admin-staff-tag--standard";
+  }
+
+  function dotClassFromServer(row) {
+    return row.statusDotClass || "admin-staff-dot--offline";
+  }
+
+  function statusLabel(st) {
+    var s = String(st || "").toLowerCase();
+    if (s === "online") return "ONLINE";
+    if (s === "away") return "AWAY";
+    return "OFFLINE";
+  }
+
+  function esc(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  async function load() {
+    try {
+      var h = await bearerHeaders();
+      var res = await fetch("/api/admin/staff", { headers: Object.assign({}, h) });
+      if (res.status === 401 || res.status === 403) {
+        document.querySelector(".admin-lux-content").innerHTML =
+          "<p>Admin only. Sign in as a user with role <code>admin</code>.</p>";
+        return;
+      }
+      var ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (!ct.includes("application/json")) {
+        throw new Error("Unexpected response from server.");
+      }
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load staff.");
+      state.rows = data.staff || [];
+      seatsEl.textContent = String(data.activeSeats != null ? data.activeSeats : state.rows.length);
+
+      if (!state.rows.length) {
+        body.innerHTML =
+          '<tr><td colspan="5" class="muted">No staff records yet. Use <strong>Provision Account</strong> or add documents to the <code>staff</code> collection.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = state.rows
+        .map(function (r) {
+          var mail = esc(r.email);
+          var nm = esc(r.name);
+          var clr = esc(r.clearanceLevel || "");
+          var tel = esc(r.lastTelemetry || "");
+          var oid = esc(r.id);
+          return (
+            "<tr>" +
+            '<td><div class="admin-staff-profile"><span class="admin-staff-avatar">' +
+            initials(r.name) +
+            '</span><div><strong>' +
+            nm +
+            "</strong><p>" +
+            mail +
+            "</p></div></div></td>" +
+            '<td><span class="admin-staff-tag ' +
+            tagClassFromServer(r) +
+            '">' +
+            clr +
+            "</span></td>" +
+            '<td><span class="admin-staff-status"><span class="' +
+            dotClassFromServer(r) +
+            '"></span><span>' +
+            statusLabel(r.status) +
+            "</span></span></td>" +
+            "<td>" +
+            tel +
+            "</td>" +
+            '<td><div class="admin-staff-actions">' +
+            '<button type="button" class="admin-staff-act" data-mail="' +
+            oid +
+            '" title="Contact">✉</button>' +
+            '<button type="button" class="admin-staff-act" data-shield="' +
+            oid +
+            '" title="Clearance">🛡</button>' +
+            '<button type="button" class="admin-staff-act" data-more="' +
+            oid +
+            '" title="More">⋯</button>' +
+            "</div></td>" +
+            "</tr>"
+          );
+        })
+        .join("");
+
+      body.querySelectorAll("[data-mail]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-mail");
+          var row = state.rows.find(function (x) {
+            return x.id === id;
+          });
+          if (row && row.email) window.location.href = "mailto:" + row.email;
+        });
+      });
+
+      body.querySelectorAll("[data-shield]").forEach(function (btn) {
+        btn.addEventListener("click", async function () {
+          var id = btn.getAttribute("data-shield");
+          var row = state.rows.find(function (x) {
+            return x.id === id;
+          });
+          if (!row) return;
+          var next = window.prompt("Clearance level (e.g. SUPER ADMIN, CATALOG MANAGER)", row.clearanceLevel || "");
+          if (next === null || !String(next).trim()) return;
+          var h = await bearerHeaders();
+          var res = await fetch("/api/admin/staff/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: Object.assign({ "Content-Type": "application/json" }, h),
+            body: JSON.stringify({ clearanceLevel: next.trim() }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update clearance.", "error");
+            return;
+          }
+          if (window.showToast) window.showToast("Clearance updated.", "success");
+          await load();
+        });
+      });
+
+      body.querySelectorAll("[data-more]").forEach(function (btn) {
+        btn.addEventListener("click", async function () {
+          var id = btn.getAttribute("data-more");
+          var choice = window.prompt(
+            "Type: status (online/away/offline), deactivate (toggle active), or delete",
+            "status"
+          );
+          if (!choice) return;
+          var h = await bearerHeaders();
+          var low = choice.trim().toLowerCase();
+          if (low.indexOf("del") === 0) {
+            if (!window.confirm("Remove this seat permanently?")) return;
+            var res = await fetch("/api/admin/staff/" + encodeURIComponent(id), {
+              method: "DELETE",
+              headers: Object.assign({}, h),
+            });
+            if (!res.ok) {
+              if (window.showToast) window.showToast("Could not delete.", "error");
+              return;
+            }
+            if (window.showToast) window.showToast("Seat removed.", "success");
+            await load();
+            return;
+          }
+          if (low.indexOf("deact") === 0 || low.indexOf("toggle") === 0) {
+            var row = state.rows.find(function (x) {
+              return x.id === id;
+            });
+            var res = await fetch("/api/admin/staff/" + encodeURIComponent(id), {
+              method: "PUT",
+              headers: Object.assign({ "Content-Type": "application/json" }, h),
+              body: JSON.stringify({ isActive: !(row && row.isActive !== false) }),
+            });
+            if (!res.ok) {
+              if (window.showToast) window.showToast("Could not update.", "error");
+              return;
+            }
+            await load();
+            return;
+          }
+          var st = window.prompt("Status: online, offline, or away", "online");
+          if (!st || !String(st).trim()) return;
+          var res = await fetch("/api/admin/staff/" + encodeURIComponent(id), {
+            method: "PUT",
+            headers: Object.assign({ "Content-Type": "application/json" }, h),
+            body: JSON.stringify({ status: st.trim().toLowerCase() }),
+          });
+          if (!res.ok) {
+            if (window.showToast) window.showToast("Could not update status.", "error");
+            return;
+          }
+          await load();
+        });
+      });
+    } catch (e) {
+      console.error(e);
+      body.innerHTML =
+        '<tr><td colspan="5" class="muted">' +
+        esc(e.message || String(e)) +
+        "</td></tr>";
+      if (window.showToast) window.showToast("Staff module failed to load.", "error");
+    }
+  }
+
+  provisionBtn.addEventListener("click", async function () {
+    var name = window.prompt("Full name");
+    if (!name || !String(name).trim()) return;
+    var email = window.prompt("Work email");
+    if (!email || !String(email).trim()) return;
+    var clearance = window.prompt(
+      "Clearance level",
+      "CATALOG MANAGER"
+    );
+    if (clearance === null) return;
+    var h = await bearerHeaders();
+    var res = await fetch("/api/admin/staff", {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json" }, h),
+      body: JSON.stringify({
+        name: name.trim(),
+        email: email.trim(),
+        clearanceLevel: (clearance || "STAFF").trim(),
+      }),
+    });
+    var data = await res.json().catch(function () {
+      return {};
+    });
+    if (!res.ok) {
+      if (window.showToast) window.showToast(data.error || "Provision failed.", "error");
+      return;
+    }
+    if (window.showToast) window.showToast("Provisioned seat " + (data.id || "") + ".", "success");
+    await load();
+  });
+
+  load();
+})();
+</script>
+{% endblock %}

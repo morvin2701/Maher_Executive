@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Dress the Part — Maher Executive{% endblock %}
+{% block content %}
+<section class="hero hero-brand home-hero-editorial">
+  <p class="hero-eyebrow">Maher Executive Signature Edit</p>
+  <h1 class="hero-brand-title">Elegance
+Noire:
+The Winter
+Edit</h1>
+  <p class="muted hero-brand-sub">A directional capsule where quiet luxury meets modern proportion. Crafted to look timeless in every frame.</p>
+  <div class="hero-actions hero-brand-actions">
+    <a class="btn btn-primary" href="/women">Shop The Collection</a>
+    <a class="btn btn-outline" href="/men">Explore Lookbook</a>
+  </div>
+</section>
+
+<section class="home-curation">
+  <div class="home-curation-head">
+    <div>
+      <p class="crumb muted">{{ page_content.curation.eyebrow }}</p>
+      <h2 class="section-title" style="margin:0;">{{ page_content.curation.title }}</h2>
+    </div>
+    <a class="crumb" href="/women">{{ page_content.curation.viewAllText }} →</a>
+  </div>
+  <div class="curation-grid">
+    {% for card in page_content.curation["items"] %}
+      <a class="curation-card" href="{{ card.link }}">
+        <img src="{{ card.image }}" alt="{{ card.name }}" loading="lazy" />
+        <div class="curation-overlay">
+          <p>{{ card.pieces }} pieces</p>
+          <h3>{{ card.name }}</h3>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="home-arrivals">
+<h2 class="section-title">{{ page_content.arrivals.title }}</h2>
+<p class="muted" style="margin-top:-1rem;">{{ page_content.arrivals.subtitle }}</p>
+<div id="home-products" class="product-grid">
+  <div class="skeleton" style="height:320px;"></div>
+  <div class="skeleton" style="height:320px;"></div>
+  <div class="skeleton" style="height:320px;"></div>
+  <div class="skeleton" style="height:320px;"></div>
+</div>
+</section>
+
+<section class="heritage-split">
+  <div class="heritage-copy">
+    <p class="crumb muted">{{ page_content.heritage.eyebrow }}</p>
+    <h3>{{ page_content.heritage.title }} <span>{{ page_content.heritage.accent }}</span></h3>
+    <p>{{ page_content.heritage.description }}</p>
+    <a href="{{ page_content.heritage.ctaLink }}">{{ page_content.heritage.ctaText }} →</a>
+  </div>
+  <div class="heritage-media">
+    <img src="{{ page_content.heritage.image }}" alt="Heritage story" loading="lazy" />
+  </div>
+</section>
+
+<section class="home-bottom">
+  <div>
+    <h4>{{ page_content.homeFooter.brandTitle }}</h4>
+    <p>{{ page_content.homeFooter.brandText }}</p>
+  </div>
+  {% for column in page_content.homeFooter.columns %}
+    <div>
+      <h5>{{ column.title }}</h5>
+      {% for link in column.links %}
+        <a href="#">{{ link }}</a>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  <div>
+    <h5>{{ page_content.homeFooter.newsletterTitle }}</h5>
+    <div class="home-newsletter-row">
+      <input type="email" id="newsletter-email" placeholder="Email address" />
+      <button class="btn btn-outline" id="newsletter-btn">Subscribe</button>
+    </div>
+    <p>{{ page_content.homeFooter.newsletterText }}</p>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  (async function () {
+    const root = document.getElementById("home-products");
+    try {
+      const res = await fetch("/api/products?limit=8");
+      const data = await res.json();
+      root.innerHTML = "";
+      (data.products || []).slice(0, 8).forEach((p, index) => {
+        const img = (p.images && p.images[0] && p.images[0].url) || "";
+        const card = document.createElement("article");
+        card.className = "card-product";
+        const badges = [];
+        if (p.isNew) badges.push('<span class="badge">New</span>');
+        if (p.discount) badges.push('<span class="badge">Sale</span>');
+        card.innerHTML =
+          '<a href="/product/' + encodeURIComponent(p.slug) + '">' +
+          (img ? '<img src="' + img + '" alt="" loading="lazy" />' : '<div class="skeleton" style="height:280px"></div>') +
+          '<div class="card-body">' +
+          badges.join(" ") +
+          '<h3 style="font-family:var(--font-display);font-size:1.1rem;margin:0.5rem 0;">' + (p.name || "") + "</h3>" +
+          '<p class="muted" style="font-size:0.76rem;letter-spacing:0.12em;text-transform:uppercase;">' + (p.category || "Ready-to-wear") + "</p>" +
+          '<p class="price-row"><span>₹' + (p.price || 0) + "</span></p>" +
+          "</div></a>";
+        card.style.animationDelay = (index * 60) + "ms";
+        root.appendChild(card);
+      });
+      if (!data.products || !data.products.length) {
+        root.innerHTML = "<p class=\"muted\">No products yet — run the Firestore seed script and deploy rules.</p>";
+      }
+    } catch (e) {
+      root.innerHTML = "<p class=\"muted\">Could not load products. Check Firebase credentials and seed data.</p>";
+    }
+  })();
+
+  document.getElementById("newsletter-btn").addEventListener("click", async function () {
+    const emailEl = document.getElementById("newsletter-email");
+    const email = (emailEl.value || "").trim();
+    if (!email || !email.includes("@")) {
+      if (window.showToast) window.showToast("Enter a valid email.", "warning");
+      return;
+    }
+    try {
+      const db = window.firebaseDb;
+      if (db) {
+        await db.collection("newsletter_subscribers").add({
+          email: email,
+          source: "home",
+          createdAt: new Date().toISOString(),
+        });
+      }
+      emailEl.value = "";
+      if (window.showToast) window.showToast("Subscribed successfully.", "success");
+    } catch (_e) {
+      if (window.showToast) window.showToast("Could not subscribe right now.", "warning");
+    }
+  });
+</script>
+{% endblock %}

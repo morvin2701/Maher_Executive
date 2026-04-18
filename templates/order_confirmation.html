@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Order confirmed{% endblock %}
+{% block content %}
+<div class="page-shell" style="text-align:center;padding:3rem 0;">
+  <p style="font-size:3rem;line-height:1;">✓</p>
+  <h1 style="font-family:var(--font-display);">Thank you</h1>
+  <p class="muted">Order ID: <span id="oid"></span></p>
+  <p style="margin-top:2rem;"><a class="btn btn-primary" href="/account/orders">Track order</a></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.getElementById("oid").textContent = {{ order_id | tojson }};
+</script>
+{% endblock %}

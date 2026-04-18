@@ -1,0 +1,12 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ page_content.title }}{% endblock %}
+{% block admin_content %}
+<div class="shop-shell">
+  <h1 style="font-family:var(--font-display);margin-top:0;">{{ page_content.title }}</h1>
+  <p class="muted">{{ page_content.subtitle }}</p>
+  <ul class="content-points">
+    {% for item in page_content.highlights %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+  <p class="muted" style="margin-top:1rem;">Order ID: <code>{{ order_id }}</code></p>
+</div>
+{% endblock %}
