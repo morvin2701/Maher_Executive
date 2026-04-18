@@ -78,6 +78,24 @@ Optional script `scripts/seed_cloudinary_firestore.py` uploads a **local** image
 - API routes: `/api/payments/razorpay/create-order`, `/api/payments/razorpay/verify`, `/api/webhooks/razorpay`.
 - Checkout demo uses **COD** without Razorpay keys.
 
+## Vercel deployment (important for login)
+
+1. Add these Vercel Environment Variables for Production/Preview:
+   - `FLASK_SECRET_KEY`
+   - `FIREBASE_API_KEY`
+   - `FIREBASE_AUTH_DOMAIN`
+   - `FIREBASE_PROJECT_ID`
+   - `FIREBASE_STORAGE_BUCKET`
+   - `FIREBASE_MESSAGING_SENDER_ID`
+   - `FIREBASE_APP_ID`
+   - `FIREBASE_MEASUREMENT_ID` (optional)
+   - `FIREBASE_SERVICE_ACCOUNT_JSON` **or** `FIREBASE_SERVICE_ACCOUNT_B64` (preferred on Vercel)
+2. Do **not** use a local file path for `GOOGLE_APPLICATION_CREDENTIALS` on Vercel.
+3. In Firebase Console → Authentication → Settings → Authorized domains:
+   - add your Vercel domain (e.g. `your-app.vercel.app`)
+   - add custom domain too (if any)
+4. Redeploy after changing env vars.
+
 ## API highlights
 
 | Endpoint | Purpose |
