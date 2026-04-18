@@ -116,6 +116,21 @@ CONTENT_DEFAULTS = {
             "prices": ["Under ₹5,000", "₹5,000 - ₹10,000", "₹10,000 - ₹20,000", "Over ₹20,000"],
         },
     },
+    "kids_section": {
+        "title": "Little Luxuries",
+        "subtitle": "Showing playful, premium pieces for young wardrobes",
+        "highlights": [
+            "Kids collection with the same editorial quality as adult lines",
+            "Filter by category, size, color, and price tier",
+            "Cart and wishlist work the same as Women and Men",
+        ],
+        "filters": {
+            "categories": ["Ready-to-Wear", "Outerwear", "Accessories", "Footwear"],
+            "sizes": ["2Y", "4Y", "6Y", "8Y", "10Y", "12Y", "14Y"],
+            "colors": ["Pink", "Blue", "Ivory", "Navy", "Mint", "Beige"],
+            "prices": ["Under ₹5,000", "₹5,000 - ₹10,000", "₹10,000 - ₹20,000", "Over ₹20,000"],
+        },
+    },
     "search": {
         "title": "Search",
         "subtitle": "Find exact pieces by style, category, and product name.",

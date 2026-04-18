@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}Kids — ME Luxury{% endblock %}
+{% block content %}
+<section class="women-shell">
+  <div class="women-topline">
+    <p class="crumb muted">Home / Collections</p>
+    <h1>{{ page_content.title }}</h1>
+    <p>{{ page_content.subtitle }}</p>
+  </div>
+
+  <div class="women-toolbar">
+    <button id="btn-toggle-filters-kids" class="btn btn-ghost btn-sm">Hide Filters</button>
+    <div class="women-view-toggle">
+      <button id="view-grid-kids" class="active" aria-label="Grid view">▦</button>
+      <button id="view-list-kids" aria-label="List view">☰</button>
+    </div>
+    <label class="women-sort">
+      <span>Sort By</span>
+      <select id="sort-select-kids">
+        <option value="featured">Featured</option>
+        <option value="price-asc">Price: Low to High</option>
+        <option value="price-desc">Price: High to Low</option>
+        <option value="name-asc">Name: A to Z</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="women-layout">
+    <aside id="kids-sidebar" class="women-sidebar">
+      <div class="women-filter-group">
+        <h4>Category</h4>
+        {% for item in page_content.filters.categories %}
+          <label><input type="checkbox" class="filter-category-kids" value="{{ item|lower }}" /> {{ item }}</label>
+        {% endfor %}
+      </div>
+      <div class="women-filter-group">
+        <h4>Size</h4>
+        {% for item in page_content.filters.sizes %}
+          <label><input type="checkbox" class="filter-size-kids" value="{{ item|lower }}" /> {{ item }}</label>
+        {% endfor %}
+      </div>
+      <div class="women-filter-group">
+        <h4>Color</h4>
+        {% for item in page_content.filters.colors %}
+          <label><input type="checkbox" class="filter-color-kids" value="{{ item|lower }}" /> {{ item }}</label>
+        {% endfor %}
+      </div>
+      <div class="women-filter-group">
+        <h4>Price</h4>
+        {% for item in page_content.filters.prices %}
+          <label><input type="checkbox" class="filter-price-kids" value="{{ loop.index0 }}" /> {{ item }}</label>
+        {% endfor %}
+      </div>
+      <button id="clear-filters-kids" class="btn btn-outline btn-sm" style="margin-top:0.5rem;">Clear All</button>
+    </aside>
+
+    <section class="women-results">
+      <div id="kids-grid" class="women-grid"></div>
+      <div class="women-loadmore">
+        <p id="kids-count" class="muted"></p>
+        <button id="kids-load-btn" class="btn btn-outline">Load More Pieces</button>
+      </div>
+    </section>
+  </div>
+</section>
+{% include "partials/shared_home_footer.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const kidsState = {
+    allProducts: [],
+    filtered: [],
+    visibleCount: 4,
+    isList: false,
+    sort: "featured",
+    filters: { categories: [], sizes: [], colors: [], prices: [] },
+  };
+
+  const kidsEls = {
+    grid: document.getElementById("kids-grid"),
+    count: document.getElementById("kids-count"),
+    loadBtn: document.getElementById("kids-load-btn"),
+    sidebar: document.getElementById("kids-sidebar"),
+  };
+
+  function getWishlistSet() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("wishlist_ids") || "[]"));
+    } catch (_e) {
+      return new Set();
+    }
+  }
+
+  function setWishlistSet(set) {
+    localStorage.setItem("wishlist_ids", JSON.stringify(Array.from(set)));
+  }
+
+  function getPriceBucket(price) {
+    if (price < 5000) return 0;
+    if (price < 10000) return 1;
+    if (price < 20000) return 2;
+    return 3;
+  }
+
+  function normalizeProduct(product) {
+    const category = String(product.category || "ready-to-wear").toLowerCase();
+    const subcategory = String(product.subcategory || "").toLowerCase();
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    const sizes = variants.map(v => String(v.size || "").toLowerCase()).filter(Boolean);
+    const colors = variants.map(v => String(v.color || "").toLowerCase()).filter(Boolean);
+    return { ...product, _category: category, _subcategory: subcategory, _sizes: sizes, _colors: colors };
+  }
+
+  function applyKidsFilters() {
+    const { categories, sizes, colors, prices } = kidsState.filters;
+    let out = kidsState.allProducts.slice();
+
+    if (categories.length) {
+      out = out.filter(p => categories.some(c => p._category.includes(c) || p._subcategory.includes(c)));
+    }
+    if (sizes.length) {
+      out = out.filter(p => p._sizes.length === 0 || sizes.some(s => p._sizes.includes(s)));
+    }
+    if (colors.length) {
+      out = out.filter(p => p._colors.length === 0 || colors.some(c => p._colors.includes(c)));
+    }
+    if (prices.length) {
+      out = out.filter(p => prices.includes(String(getPriceBucket(Number(p.price || 0)))));
+    }
+
+    if (kidsState.sort === "price-asc") out.sort((a, b) => (a.price || 0) - (b.price || 0));
+    else if (kidsState.sort === "price-desc") out.sort((a, b) => (b.price || 0) - (a.price || 0));
+    else if (kidsState.sort === "name-asc") out.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+
+    kidsState.filtered = out;
+    renderKidsProducts();
+  }
+
+  function addToCart(productId) {
+    const raw = localStorage.getItem("cart") || "{}";
+    const cart = JSON.parse(raw);
+    cart[productId] = (cart[productId] || 0) + 1;
+    localStorage.setItem("cart", JSON.stringify(cart));
+    if (window.showToast) window.showToast("Added to bag", "success");
+  }
+
+  function toggleWishlist(productId) {
+    const set = getWishlistSet();
+    if (set.has(productId)) set.delete(productId);
+    else set.add(productId);
+    setWishlistSet(set);
+    renderKidsProducts();
+  }
+
+  function renderKidsProducts() {
+    const wishSet = getWishlistSet();
+    const list = kidsState.filtered.slice(0, kidsState.visibleCount);
+    kidsEls.grid.classList.toggle("women-grid-list", kidsState.isList);
+    kidsEls.grid.innerHTML = "";
+
+    list.forEach((p) => {
+      const img = (p.images && p.images[0] && p.images[0].url) || "";
+      const card = document.createElement("article");
+      card.className = "women-card";
+      card.innerHTML =
+        '<div class="women-card-media">' +
+        '<a class="women-image-link" href="/product/' + encodeURIComponent(p.slug) + '">' +
+        (img ? '<img src="' + img + '" alt="" loading="lazy" />' : '<div class="skeleton" style="height:300px"></div>') +
+        "</a>" +
+        '<button class="women-heart kids-heart" data-id="' + p.id + '">' + (wishSet.has(p.id) ? "♥" : "♡") + "</button>" +
+        ((p.isNew || p.discount) ? '<span class="badge">' + (p.isNew ? "New" : "Sale") + '</span>' : "") +
+        '<button class="women-add-overlay add-bag-kids" data-id="' + p.id + '"><span class="women-add-icon">◱</span> Add to Cart</button>' +
+        "</div>" +
+        '<div class="women-card-body">' +
+        '<p class="women-meta">' + String(p.category || "Kids").replaceAll("-", " ") + "</p>" +
+        '<h3><a href="/product/' + encodeURIComponent(p.slug) + '">' + (p.name || "") + "</a></h3>" +
+        '<p class="price-row"><span>₹' + (p.price || 0) + "</span>" +
+        (p.comparePrice ? '<span class="price-compare">₹' + p.comparePrice + "</span>" : "") +
+        "</p></div>";
+      kidsEls.grid.appendChild(card);
+    });
+
+    kidsEls.count.textContent = "Showing " + Math.min(kidsState.visibleCount, kidsState.filtered.length) + " of " + kidsState.filtered.length + " products";
+    kidsEls.loadBtn.style.display = kidsState.visibleCount >= kidsState.filtered.length ? "none" : "";
+
+    kidsEls.grid.querySelectorAll(".add-bag-kids").forEach((btn) => {
+      btn.addEventListener("click", () => addToCart(btn.dataset.id));
+    });
+    kidsEls.grid.querySelectorAll(".kids-heart").forEach((btn) => {
+      btn.addEventListener("click", () => toggleWishlist(btn.dataset.id));
+    });
+  }
+
+  async function initKidsPage() {
+    let res = await fetch("/api/products?limit=300&category=kids");
+    let data = await res.json();
+    let list = (data.products || []).map(normalizeProduct);
+    if (!list.length) {
+      res = await fetch("/api/products?limit=300");
+      data = await res.json();
+      const all = (data.products || []).map(normalizeProduct);
+      list = all.filter((p) => p._category.includes("kids") || p._subcategory.includes("kids"));
+      if (!list.length) list = all;
+    }
+    kidsState.allProducts = list;
+    kidsState.filtered = kidsState.allProducts.slice();
+    renderKidsProducts();
+  }
+
+  document.getElementById("btn-toggle-filters-kids").addEventListener("click", function () {
+    kidsEls.sidebar.classList.toggle("women-sidebar-hidden");
+    this.textContent = kidsEls.sidebar.classList.contains("women-sidebar-hidden") ? "Show Filters" : "Hide Filters";
+  });
+
+  document.getElementById("view-grid-kids").addEventListener("click", function () {
+    kidsState.isList = false;
+    this.classList.add("active");
+    document.getElementById("view-list-kids").classList.remove("active");
+    renderKidsProducts();
+  });
+  document.getElementById("view-list-kids").addEventListener("click", function () {
+    kidsState.isList = true;
+    this.classList.add("active");
+    document.getElementById("view-grid-kids").classList.remove("active");
+    renderKidsProducts();
+  });
+
+  document.getElementById("sort-select-kids").addEventListener("change", function () {
+    kidsState.sort = this.value;
+    applyKidsFilters();
+  });
+
+  document.querySelectorAll(".filter-category-kids,.filter-size-kids,.filter-color-kids,.filter-price-kids").forEach((input) => {
+    input.addEventListener("change", () => {
+      kidsState.filters.categories = Array.from(document.querySelectorAll(".filter-category-kids:checked")).map(x => x.value);
+      kidsState.filters.sizes = Array.from(document.querySelectorAll(".filter-size-kids:checked")).map(x => x.value);
+      kidsState.filters.colors = Array.from(document.querySelectorAll(".filter-color-kids:checked")).map(x => x.value);
+      kidsState.filters.prices = Array.from(document.querySelectorAll(".filter-price-kids:checked")).map(x => x.value);
+      kidsState.visibleCount = 4;
+      applyKidsFilters();
+    });
+  });
+
+  document.getElementById("clear-filters-kids").addEventListener("click", function () {
+    document.querySelectorAll(".filter-category-kids,.filter-size-kids,.filter-color-kids,.filter-price-kids").forEach((x) => { x.checked = false; });
+    kidsState.filters = { categories: [], sizes: [], colors: [], prices: [] };
+    kidsState.visibleCount = 4;
+    kidsState.sort = "featured";
+    document.getElementById("sort-select-kids").value = "featured";
+    applyKidsFilters();
+  });
+
+  kidsEls.loadBtn.addEventListener("click", function () {
+    kidsState.visibleCount += 4;
+    renderKidsProducts();
+  });
+
+  initKidsPage();
+</script>
+{% endblock %}

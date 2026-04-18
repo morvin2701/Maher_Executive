@@ -66,6 +66,10 @@ def create_app():
     def page_men():
         return render_with_content("men.html", "men_section")
 
+    @app.get("/kids")
+    def page_kids():
+        return render_with_content("kids.html", "kids_section")
+
     @app.get("/search")
     def page_search():
         return render_with_content("search.html", "search")
