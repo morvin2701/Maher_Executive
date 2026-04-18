@@ -43,8 +43,15 @@
     const state = {
       products: {},
       cart: {},
-      discount: 0,
     };
+
+    function getPromoDiscount(subtotal) {
+      if (!window.CouponClient) return 0;
+      const meta = CouponClient.readMeta();
+      if (!meta || !CouponClient.getCode()) return 0;
+      const d = CouponClient.discountFromMeta(subtotal, meta);
+      return Math.round(d * 100) / 100;
+    }
 
     const els = {
       items: document.getElementById("cart-items"),
@@ -88,7 +95,7 @@
       });
       const shipping = subtotal > 0 && subtotal < 2999 ? 99 : 0;
       const tax = subtotal * 0.18;
-      const discount = Math.min(state.discount, subtotal);
+      const discount = Math.min(getPromoDiscount(subtotal), subtotal);
       const total = Math.max(0, subtotal + shipping + tax - discount);
       return { pieces, subtotal, shipping, tax, discount, total };
     }
@@ -175,6 +182,7 @@
 
     function render() {
       const hasItems = Object.keys(state.cart).some((id) => Number(state.cart[id]) > 0 && state.products[id]);
+      if (!hasItems && window.CouponClient) CouponClient.clear();
       els.empty.style.display = hasItems ? "none" : "";
       els.items.style.display = hasItems ? "" : "none";
       renderItems();
@@ -188,27 +196,36 @@
       }
     });
 
-    els.promoApply.addEventListener("click", () => {
-      const code = String(els.promoCode.value || "").trim().toUpperCase();
-      const subtotal = computeTotals().subtotal;
+    els.promoApply.addEventListener("click", async () => {
+      const code = String(els.promoCode.value || "").trim();
       if (!code) {
         if (window.showToast) window.showToast("Enter promo code first.", "warning");
         return;
       }
-      if (code === "MAHER10") {
-        state.discount = Math.min(Math.round(subtotal * 0.1), 500);
-        if (window.showToast) window.showToast("Promo applied: MAHER10", "success");
-      } else {
-        state.discount = 0;
-        if (window.showToast) window.showToast("Invalid promo code.", "error");
+      const subtotal = computeTotals().subtotal;
+      try {
+        const data = await CouponClient.validate(code, subtotal);
+        if (data.ok) {
+          CouponClient.persistFromValidate(data);
+          if (window.showToast) window.showToast("Promotion applied: " + (data.code || code).toUpperCase(), "success");
+        } else {
+          CouponClient.clear();
+          if (window.showToast) window.showToast("Invalid, expired, or inactive code.", "error");
+        }
+      } catch (_err) {
+        if (window.showToast) window.showToast("Could not verify code. Try again.", "error");
       }
-      renderSummary();
+      render();
     });
 
     try {
       state.cart = JSON.parse(localStorage.getItem("cart") || "{}");
     } catch (_e) {
       state.cart = {};
+    }
+
+    if (window.CouponClient && CouponClient.getCode()) {
+      els.promoCode.value = CouponClient.getCode();
     }
 
     try {
@@ -219,6 +236,18 @@
       });
     } catch (_err) {
       if (window.showToast) window.showToast("Unable to load bag items.", "warning");
+    }
+
+    if (window.CouponClient && CouponClient.getCode() && !CouponClient.readMeta()) {
+      try {
+        const subtotal = computeTotals().subtotal;
+        const v = await CouponClient.validate(CouponClient.getCode(), subtotal);
+        if (v.ok) CouponClient.persistFromValidate(v);
+        else CouponClient.clear();
+      } catch (_e) {
+        CouponClient.clear();
+      }
+      if (CouponClient.getCode()) els.promoCode.value = CouponClient.getCode();
     }
 
     render();

@@ -1,7 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Account Addresses — ME Clothing{% endblock %}
+{% block title %}Shipping Addresses — Maher Executive{% endblock %}
+{% block head_extra %}
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+{% endblock %}
 {% block content %}
-<section class="account-shell" data-account-page="addresses">
+<section class="account-shell account-shell--addresses" data-account-page="addresses">
   <aside class="account-sidebar">
     <div class="account-member-card">
       <div class="account-member-avatar" id="account-avatar">A</div>
@@ -19,11 +22,21 @@
     </nav>
   </aside>
 
-  <div class="account-main">
-    <h1>Shipping Addresses</h1>
-    <div class="account-title-line"></div>
-    <div id="addresses-list" class="address-grid"></div>
-    <button type="button" class="address-add-card" id="address-add-btn">+ Add New Residence</button>
+  <div class="account-main account-main--addresses">
+    <header class="addr-hero">
+      <h1 class="addr-title">SHIPPING ADDRESSES</h1>
+      <div class="addr-title-accent" aria-hidden="true"></div>
+    </header>
+    <div id="addresses-list" class="addr-grid"></div>
+    <button type="button" class="addr-add-card" id="address-add-btn" aria-label="Add new residence">
+      <span class="addr-add-card__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z" />
+          <circle cx="12" cy="10" r="2.25" fill="none" />
+        </svg>
+      </span>
+      <span class="addr-add-card__label">ADD NEW RESIDENCE</span>
+    </button>
   </div>
 </section>
 {% endblock %}

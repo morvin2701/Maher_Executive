@@ -1,51 +1,478 @@
 {% extends "base.html" %}
-{% block title %}Checkout — ME Clothing{% endblock %}
+{% block title %}Checkout — Maher Executive{% endblock %}
+{% block head_extra %}
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+{% endblock %}
 {% block content %}
-<div class="page-shell" style="max-width:640px;">
-  <h1 style="font-family:var(--font-display);">Checkout</h1>
-  <p class="muted">Step 1 — Delivery. Use valid details; order is stored in Firestore via API.</p>
-  <div class="field"><label>Name</label><input id="cx-name" /></div>
-  <div class="field"><label>Phone</label><input id="cx-phone" /></div>
-  <div class="field"><label>Address</label><textarea id="cx-addr" rows="3"></textarea></div>
-  <div class="field"><label>City</label><input id="cx-city" /></div>
-  <div class="field"><label>Pincode</label><input id="cx-pin" /></div>
-  <p class="muted">Payment: Razorpay (card/UPI) when keys are set; otherwise use COD below.</p>
-  <div class="field"><label>Payment</label>
-    <select id="cx-pay"><option value="COD">COD</option><option value="UPI">UPI (Razorpay)</option><option value="Card">Card (Razorpay)</option></select>
+<section class="checkout-page" data-page-key="{{ page_key }}">
+  {% set prog = page_content.progress or {} %}
+  {% set labels = page_content.labels or {} %}
+  <header class="checkout-hero">
+    <p class="checkout-eyebrow">{{ page_content.eyebrow | default('SECURE CHECKOUT', true) }}</p>
+    <h1 class="checkout-title">{{ page_content.title | default('Delivery address', true) }}</h1>
+    {% if page_content.subtitle %}
+    <p class="checkout-subtitle muted">{{ page_content.subtitle }}</p>
+    {% endif %}
+  </header>
+
+  <nav class="checkout-progress" aria-label="Checkout steps">
+    <div class="checkout-progress__track" aria-hidden="true"></div>
+    <button type="button" class="checkout-step checkout-step--active" data-go-step="1" id="prog-step-1" aria-current="step">
+      <span class="checkout-step__circle">
+        <svg class="checkout-step__svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z" />
+          <circle cx="12" cy="10" r="2.25" />
+        </svg>
+      </span>
+      <span class="checkout-step__label">{{ prog.delivery | default('DELIVERY', true) }}</span>
+    </button>
+    <button type="button" class="checkout-step" data-go-step="2" id="prog-step-2" disabled>
+      <span class="checkout-step__circle">
+        <svg class="checkout-step__svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M3 8h10v6H3V8z" />
+          <path d="M13 8h2l4 4v6h-3.5" />
+          <circle cx="7" cy="18.5" r="1.75" />
+          <circle cx="17.5" cy="18.5" r="1.75" />
+          <path d="M3 14v4.5h2.5" />
+        </svg>
+      </span>
+      <span class="checkout-step__label">{{ prog.shipping | default('SHIPPING', true) }}</span>
+    </button>
+    <button type="button" class="checkout-step" data-go-step="3" id="prog-step-3" disabled>
+      <span class="checkout-step__circle">
+        <svg class="checkout-step__svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="2.5" y="5" width="19" height="14" rx="2" />
+          <path d="M2.5 10.5h19" />
+          <path d="M6 15.5h4" />
+        </svg>
+      </span>
+      <span class="checkout-step__label">{{ prog.payment | default('PAYMENT', true) }}</span>
+    </button>
+  </nav>
+
+  <div class="checkout-layout">
+    <div class="checkout-main">
+      <!-- Step 1: Delivery -->
+      <div class="checkout-panel" data-step-panel="1">
+        <h2 class="checkout-panel__heading">{{ page_content.form_title | default('DELIVERY ADDRESS', true) }}</h2>
+        <form class="checkout-form" id="form-delivery" autocomplete="on">
+          <div class="checkout-form__row">
+            <div class="checkout-field">
+              <label for="cx-first">FIRST NAME</label>
+              <input id="cx-first" name="given-name" type="text" required maxlength="80" />
+            </div>
+            <div class="checkout-field">
+              <label for="cx-last">LAST NAME</label>
+              <input id="cx-last" name="family-name" type="text" required maxlength="80" />
+            </div>
+          </div>
+          <div class="checkout-field">
+            <label for="cx-phone">PHONE</label>
+            <input id="cx-phone" name="tel" type="tel" inputmode="numeric" required maxlength="15" placeholder="10-digit mobile" />
+          </div>
+          <div class="checkout-field">
+            <label for="cx-street">STREET ADDRESS</label>
+            <input id="cx-street" name="street-address" type="text" required maxlength="200" />
+          </div>
+          <div class="checkout-form__row">
+            <div class="checkout-field">
+              <label for="cx-city">CITY</label>
+              <input id="cx-city" name="address-level2" type="text" required maxlength="80" />
+            </div>
+            <div class="checkout-field">
+              <label for="cx-pin">POSTAL CODE</label>
+              <input id="cx-pin" name="postal-code" type="text" inputmode="numeric" required maxlength="6" pattern="[0-9]{6}" title="6-digit PIN code" />
+            </div>
+          </div>
+        </form>
+        <button type="button" class="checkout-cta" id="btn-to-shipping" disabled>
+          {{ labels.continueShipping | default('CONTINUE TO SHIPPING', true) }}
+        </button>
+      </div>
+
+      <!-- Step 2: Shipping -->
+      <div class="checkout-panel is-hidden" data-step-panel="2" hidden>
+        <h2 class="checkout-panel__heading">{{ prog.shipping | default('SHIPPING', true) }}</h2>
+        <fieldset class="checkout-ship-options" id="ship-options">
+          <legend class="visually-hidden">Delivery method</legend>
+          <label class="checkout-ship-card">
+            <input type="radio" name="ship-method" value="standard" checked />
+            <span class="checkout-ship-card__body">
+              <span class="checkout-ship-card__title">{{ labels.standardShipping | default('Standard delivery', true) }}</span>
+              <span class="checkout-ship-card__meta">Complimentary over ₹2,999 · otherwise ₹99</span>
+            </span>
+          </label>
+          <label class="checkout-ship-card">
+            <input type="radio" name="ship-method" value="bespoke" />
+            <span class="checkout-ship-card__body">
+              <span class="checkout-ship-card__title">{{ labels.bespokeShipping | default('Bespoke concierge delivery', true) }}</span>
+              <span class="checkout-ship-card__meta">Includes priority handling (+₹50)</span>
+            </span>
+          </label>
+        </fieldset>
+        <button type="button" class="checkout-cta" id="btn-to-payment">
+          {{ labels.continuePayment | default('CONTINUE TO PAYMENT', true) }}
+        </button>
+        <button type="button" class="checkout-back" id="btn-back-delivery">← {{ prog.delivery | default('DELIVERY', true) }}</button>
+      </div>
+
+      <!-- Step 3: Payment -->
+      <div class="checkout-panel checkout-panel--payment is-hidden" data-step-panel="3" hidden>
+        <h2 class="checkout-panel__heading">{{ prog.payment | default('PAYMENT', true) }}</h2>
+        <div class="checkout-payment-stack">
+          <div class="checkout-field">
+            <label for="cx-pay">PAYMENT METHOD</label>
+            <select id="cx-pay" class="checkout-select">
+              <option value="COD">Cash on delivery</option>
+              <option value="UPI">UPI (Razorpay)</option>
+              <option value="Card">Card (Razorpay)</option>
+            </select>
+          </div>
+          <p class="checkout-hint checkout-hint--tight muted">Razorpay appears when server keys are configured; otherwise complete with COD.</p>
+          <div class="checkout-promo">
+            <label for="cx-promo">PROMO CODE</label>
+            <div class="checkout-promo__row">
+              <input type="text" id="cx-promo" class="checkout-promo__input" placeholder="Enter code" autocomplete="off" spellcheck="false" />
+              <button type="button" class="checkout-promo__apply" id="cx-promo-apply">Apply</button>
+            </div>
+            <p class="checkout-promo__hint muted">Codes issued in admin apply here and in your bag.</p>
+            <button type="button" class="checkout-promo__clear" id="cx-promo-clear" hidden>Remove promotion</button>
+          </div>
+        </div>
+        <button type="button" class="checkout-cta" id="cx-submit">
+          {{ labels.placeOrder | default('PLACE ORDER', true) }}
+        </button>
+        <button type="button" class="checkout-back" id="btn-back-shipping">← {{ prog.shipping | default('SHIPPING', true) }}</button>
+      </div>
+    </div>
+
+    <aside class="checkout-summary-card" aria-labelledby="order-overview-title">
+      <h3 id="order-overview-title" class="checkout-summary-card__title">{{ labels.orderOverview | default('ORDER OVERVIEW', true) }}</h3>
+      <div class="checkout-summary-card__divider"></div>
+      <dl class="checkout-summary-rows">
+        <div class="checkout-summary-row">
+          <dt>{{ labels.subtotal | default('SUBTOTAL', true) }}</dt>
+          <dd id="ov-subtotal">₹0.00</dd>
+        </div>
+        <div class="checkout-summary-row">
+          <dt id="ov-ship-label">{{ labels.shippingLine | default('BESPOKE DELIVERY', true) }}</dt>
+          <dd id="ov-shipping">₹0.00</dd>
+        </div>
+        <div class="checkout-summary-row">
+          <dt>{{ labels.tax | default('TAX (GST)', true) }}</dt>
+          <dd id="ov-tax">₹0.00</dd>
+        </div>
+        <div class="checkout-summary-row checkout-summary-row--discount" id="ov-discount-row" hidden>
+          <dt>{{ labels.discount | default('PROMOTION', true) }}</dt>
+          <dd id="ov-discount">−₹0.00</dd>
+        </div>
+      </dl>
+      <div class="checkout-summary-total">
+        <span>{{ labels.total | default('ACQUISITION TOTAL', true) }}</span>
+        <strong id="ov-total">₹0.00</strong>
+      </div>
+    </aside>
   </div>
-  <button type="button" class="btn btn-primary" id="cx-submit">Place order</button>
-</div>
+
+  <div id="checkout-empty" class="checkout-empty is-hidden" hidden>
+    <p>Your bag is empty.</p>
+    <a class="btn btn-outline" href="/cart">Return to bag</a>
+  </div>
+</section>
+
+<script type="application/json" id="checkout-labels-json">{{ labels | tojson }}</script>
+{% include "partials/shared_home_footer.html" %}
 {% endblock %}
 {% block scripts %}
 <script>
-  document.getElementById("cx-submit").onclick = async function () {
-    const headers = await (window.getBearerHeaders ? window.getBearerHeaders() : {});
+(function () {
+  const labels = (function () {
+    try {
+      return JSON.parse(document.getElementById("checkout-labels-json").textContent || "{}");
+    } catch (_e) {
+      return {};
+    }
+  })();
+
+  const L = {
+    shipStandard: labels.standardShipping || "Standard delivery",
+    shipBespoke: labels.bespokeShipping || "Bespoke concierge delivery",
+    deliveryLine: labels.shippingLine || "DELIVERY",
+  };
+
+  const els = {
+    panels: document.querySelectorAll("[data-step-panel]"),
+    progBtns: document.querySelectorAll("[data-go-step]"),
+    btnShipping: document.getElementById("btn-to-shipping"),
+    btnPayment: document.getElementById("btn-to-payment"),
+    btnSubmit: document.getElementById("cx-submit"),
+    btnBackDelivery: document.getElementById("btn-back-delivery"),
+    btnBackShipping: document.getElementById("btn-back-shipping"),
+    shipRadios: document.querySelectorAll('input[name="ship-method"]'),
+    first: document.getElementById("cx-first"),
+    last: document.getElementById("cx-last"),
+    phone: document.getElementById("cx-phone"),
+    street: document.getElementById("cx-street"),
+    city: document.getElementById("cx-city"),
+    pin: document.getElementById("cx-pin"),
+    pay: document.getElementById("cx-pay"),
+    ovSub: document.getElementById("ov-subtotal"),
+    ovShipLabel: document.getElementById("ov-ship-label"),
+    ovShip: document.getElementById("ov-shipping"),
+    ovTax: document.getElementById("ov-tax"),
+    ovDiscRow: document.getElementById("ov-discount-row"),
+    ovDisc: document.getElementById("ov-discount"),
+    ovTotal: document.getElementById("ov-total"),
+    empty: document.getElementById("checkout-empty"),
+    page: document.querySelector(".checkout-page"),
+    promoInput: document.getElementById("cx-promo"),
+    promoApply: document.getElementById("cx-promo-apply"),
+    promoClear: document.getElementById("cx-promo-clear"),
+  };
+
+  const state = {
+    products: {},
+    cart: {},
+    step: 1,
+    shipMethod: "standard",
+  };
+
+  function fmt(value) {
+    return "₹" + Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function getPromoDiscount(subtotal) {
+    if (!window.CouponClient) return 0;
+    var meta = CouponClient.readMeta();
+    if (!meta || !CouponClient.getCode()) return 0;
+    var d = CouponClient.discountFromMeta(subtotal, meta);
+    return Math.round(d * 100) / 100;
+  }
+
+  function syncPromoUi() {
+    if (!els.promoInput || !els.promoClear) return;
+    var c = CouponClient.getCode();
+    els.promoInput.value = c || "";
+    els.promoClear.hidden = !c;
+  }
+
+  function baseShipping(subtotal) {
+    return subtotal > 0 && subtotal < 2999 ? 99 : 0;
+  }
+
+  function shippingAmount(subtotal, method) {
+    var base = baseShipping(subtotal);
+    if (method === "bespoke") return base + 50;
+    return base;
+  }
+
+  function getLineTotal(productId) {
+    var p = state.products[productId];
+    var qty = Number(state.cart[productId] || 0);
+    if (!p || qty <= 0) return 0;
+    return Number(p.price || 0) * qty;
+  }
+
+  function computeTotals() {
+    var ids = Object.keys(state.cart).filter(function (id) {
+      return Number(state.cart[id]) > 0 && state.products[id];
+    });
+    var pieces = 0;
+    var subtotal = 0;
+    ids.forEach(function (id) {
+      var qty = Number(state.cart[id] || 0);
+      pieces += qty;
+      subtotal += getLineTotal(id);
+    });
+    var discount = Math.min(getPromoDiscount(subtotal), subtotal);
+    var ship = shippingAmount(subtotal, state.shipMethod);
+    var tax = subtotal * 0.18;
+    var total = Math.max(0, subtotal + ship + tax - discount);
+    return { pieces: pieces, subtotal: subtotal, shipping: ship, tax: tax, discount: discount, total: total };
+  }
+
+  function updateSummary() {
+    var t = computeTotals();
+    els.ovSub.textContent = fmt(t.subtotal);
+    els.ovTax.textContent = fmt(t.tax);
+    if (state.shipMethod === "bespoke") {
+      els.ovShipLabel.textContent = L.shipBespoke;
+    } else {
+      els.ovShipLabel.textContent = L.shipStandard;
+    }
+    els.ovShip.textContent = t.shipping === 0 ? "Complimentary" : fmt(t.shipping);
+    if (t.discount > 0) {
+      els.ovDiscRow.hidden = false;
+      els.ovDisc.textContent = "−" + fmt(t.discount);
+    } else {
+      els.ovDiscRow.hidden = true;
+    }
+    els.ovTotal.textContent = fmt(t.total);
+  }
+
+  function stepValid(step) {
+    if (step === 1) {
+      var pin = String(els.pin.value || "").trim();
+      var phone = String(els.phone.value || "").replace(/\D/g, "");
+      return (
+        els.first.value.trim() &&
+        els.last.value.trim() &&
+        phone.length >= 10 &&
+        els.street.value.trim() &&
+        els.city.value.trim() &&
+        /^[0-9]{6}$/.test(pin)
+      );
+    }
+    return true;
+  }
+
+  function refreshStep1Button() {
+    els.btnShipping.disabled = !stepValid(1);
+  }
+
+  function setStep(n) {
+    state.step = n;
+    els.panels.forEach(function (el) {
+      var s = el.getAttribute("data-step-panel");
+      var on = String(s) === String(n);
+      el.classList.toggle("is-hidden", !on);
+      el.hidden = !on;
+    });
+    els.progBtns.forEach(function (btn) {
+      var sn = Number(btn.getAttribute("data-go-step"));
+      var done = sn < n;
+      var active = sn === n;
+      var isFuture = sn > n;
+      btn.classList.toggle("checkout-step--done", done);
+      btn.classList.toggle("checkout-step--active", active);
+      btn.classList.toggle("checkout-step--future", isFuture);
+      btn.disabled = isFuture;
+      if (active) btn.setAttribute("aria-current", "step");
+      else btn.removeAttribute("aria-current");
+    });
+    if (n === 1) refreshStep1Button();
+    if (n === 3) syncPromoUi();
+    updateSummary();
+  }
+
+  function goStep(n) {
+    if (n < state.step) {
+      setStep(n);
+      return;
+    }
+    if (n === 2 && !stepValid(1)) {
+      if (window.showToast) window.showToast("Please complete all delivery fields.", "warning");
+      return;
+    }
+    setStep(n);
+  }
+
+  [els.first, els.last, els.phone, els.street, els.city, els.pin].forEach(function (inp) {
+    if (!inp) return;
+    inp.addEventListener("input", refreshStep1Button);
+    inp.addEventListener("blur", refreshStep1Button);
+  });
+
+  els.progBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var target = Number(btn.getAttribute("data-go-step"));
+      if (btn.disabled && target > state.step) return;
+      goStep(target);
+    });
+  });
+
+  els.btnShipping.addEventListener("click", function () {
+    goStep(2);
+  });
+
+  els.btnPayment.addEventListener("click", function () {
+    goStep(3);
+  });
+
+  els.btnBackDelivery.addEventListener("click", function () {
+    goStep(1);
+  });
+
+  els.btnBackShipping.addEventListener("click", function () {
+    goStep(2);
+  });
+
+  els.shipRadios.forEach(function (r) {
+    r.addEventListener("change", function () {
+      state.shipMethod = r.checked ? r.value : state.shipMethod;
+      updateSummary();
+    });
+  });
+
+  document.getElementById("ship-options").addEventListener("change", function () {
+    var c = document.querySelector('input[name="ship-method"]:checked');
+    state.shipMethod = c ? c.value : "standard";
+    updateSummary();
+  });
+
+  if (els.promoApply) {
+    els.promoApply.addEventListener("click", async function () {
+      var raw = String(els.promoInput.value || "").trim();
+      if (!raw) {
+        if (window.showToast) window.showToast("Enter a promo code.", "warning");
+        return;
+      }
+      var subtotal = computeTotals().subtotal;
+      try {
+        var data = await CouponClient.validate(raw, subtotal);
+        if (data.ok) {
+          CouponClient.persistFromValidate(data);
+          if (window.showToast) window.showToast("Promotion applied.", "success");
+        } else {
+          CouponClient.clear();
+          if (window.showToast) window.showToast("Code is not valid or has expired.", "error");
+        }
+      } catch (_e) {
+        if (window.showToast) window.showToast("Could not verify code. Try again.", "error");
+      }
+      syncPromoUi();
+      updateSummary();
+    });
+  }
+
+  if (els.promoClear) {
+    els.promoClear.addEventListener("click", function () {
+      CouponClient.clear();
+      if (els.promoInput) els.promoInput.value = "";
+      els.promoClear.hidden = true;
+      updateSummary();
+    });
+  }
+
+  els.btnSubmit.addEventListener("click", async function () {
+    var headers = await (window.getBearerHeaders ? window.getBearerHeaders() : {});
     if (!headers.Authorization) {
-      showToast("Please sign in first.", "error");
+      if (window.showToast) window.showToast("Please sign in first.", "error");
       window.location.href = "/auth";
       return;
     }
-    const raw = localStorage.getItem("cart") || "{}";
-    const cart = JSON.parse(raw);
-    const ids = Object.keys(cart);
-    if (!ids.length) {
-      showToast("Bag is empty", "error");
+    var totals = computeTotals();
+    if (totals.pieces <= 0) {
+      if (window.showToast) window.showToast("Your bag is empty.", "error");
       return;
     }
-    const res = await fetch("/api/products?limit=200");
-    const data = await res.json();
-    const byId = {};
-    (data.products || []).forEach((p) => {
-      byId[p.id] = p;
+    if (!stepValid(1)) {
+      if (window.showToast) window.showToast("Check your delivery details.", "warning");
+      goStep(1);
+      return;
+    }
+
+    var ids = Object.keys(state.cart).filter(function (id) {
+      return Number(state.cart[id]) > 0 && state.products[id];
     });
-    const items = [];
-    let subtotal = 0;
-    ids.forEach((id) => {
-      const p = byId[id];
-      const qty = cart[id];
-      if (!p) return;
-      const line = (p.price || 0) * qty;
-      subtotal += line;
+    if (!ids.length) {
+      if (window.showToast) window.showToast("Unable to load your bag items. Please refresh.", "error");
+      return;
+    }
+    var items = [];
+    ids.forEach(function (id) {
+      var p = state.products[id];
+      var qty = Number(state.cart[id]);
       items.push({
         productId: id,
         name: p.name,
@@ -56,36 +483,96 @@
         price: p.price,
       });
     });
-    const pay = document.getElementById("cx-pay").value;
-    const body = {
+
+    var pay = els.pay.value;
+    var fullName = (els.first.value.trim() + " " + els.last.value.trim()).trim();
+
+    var body = {
       items: items,
-      subtotal: subtotal,
-      shipping: subtotal >= 2999 ? 0 : 99,
-      tax: 0,
-      total: subtotal + (subtotal >= 2999 ? 0 : 99),
+      subtotal: totals.subtotal,
+      shipping: totals.shipping,
+      tax: totals.tax,
+      discount: totals.discount,
+      total: totals.total,
       paymentMethod: pay,
-      paymentStatus: pay === "COD" ? "pending" : "pending",
+      paymentStatus: "pending",
+      couponCode: window.CouponClient ? CouponClient.getCode() : "",
       shippingAddress: {
-        name: document.getElementById("cx-name").value,
-        phone: document.getElementById("cx-phone").value,
-        line1: document.getElementById("cx-addr").value,
-        city: document.getElementById("cx-city").value,
-        pincode: document.getElementById("cx-pin").value,
+        name: fullName,
+        phone: els.phone.value.trim(),
+        line1: els.street.value.trim(),
+        city: els.city.value.trim(),
+        pincode: els.pin.value.trim(),
         country: "IN",
       },
     };
-    const r = await fetch("/api/orders", {
+
+    var r = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
     });
+    var payload = await r.json().catch(function () {
+      return {};
+    });
     if (!r.ok) {
-      showToast("Order failed", "error");
+      var msg = payload.error || "Order failed. Try again.";
+      if (window.showToast) window.showToast(msg, "error");
       return;
     }
-    const o = await r.json();
+    var o = payload;
     localStorage.setItem("cart", "{}");
+    if (window.CouponClient) CouponClient.clear();
     window.location.href = "/order-confirmation/" + encodeURIComponent(o.orderId);
-  };
+  });
+
+  try {
+    state.cart = JSON.parse(localStorage.getItem("cart") || "{}");
+  } catch (_e) {
+    state.cart = {};
+  }
+
+  (async function init() {
+    try {
+      var res = await fetch("/api/products?limit=500");
+      var data = await res.json();
+      (data.products || []).forEach(function (p) {
+        state.products[p.id] = p;
+      });
+    } catch (_err) {
+      if (window.showToast) window.showToast("Unable to load products.", "warning");
+    }
+
+    var hasItems = Object.keys(state.cart).some(function (id) {
+      return Number(state.cart[id]) > 0;
+    });
+    if (!hasItems) {
+      els.page.classList.add("is-hidden");
+      els.page.hidden = true;
+      els.empty.hidden = false;
+      els.empty.classList.remove("is-hidden");
+      return;
+    }
+
+    if (computeTotals().pieces === 0 && Object.keys(state.products).length > 0) {
+      if (window.showToast) window.showToast("Some bag items are unavailable. Return to your bag to update.", "warning");
+    }
+
+    if (window.CouponClient && CouponClient.getCode() && !CouponClient.readMeta()) {
+      try {
+        var v = await CouponClient.validate(CouponClient.getCode(), computeTotals().subtotal);
+        if (v.ok) CouponClient.persistFromValidate(v);
+        else CouponClient.clear();
+      } catch (_e) {
+        CouponClient.clear();
+      }
+    }
+
+    updateSummary();
+    setStep(1);
+    refreshStep1Button();
+    syncPromoUi();
+  })();
+})();
 </script>
 {% endblock %}

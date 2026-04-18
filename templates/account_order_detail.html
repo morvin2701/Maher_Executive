@@ -1,7 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Order — ME Clothing{% endblock %}
+{% block title %}Order — Maher Executive{% endblock %}
+{% block head_extra %}
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+{% endblock %}
 {% block content %}
-<section class="account-shell" data-account-page="order_detail" data-order-id="{{ order_id }}">
+<section class="account-shell account-shell--orders" data-account-page="order_detail" data-order-id="{{ order_id }}">
   <aside class="account-sidebar">
     <div class="account-member-card">
       <div class="account-member-avatar" id="account-avatar">A</div>
@@ -19,10 +22,12 @@
     </nav>
   </aside>
 
-  <div class="account-main">
-    <h1>Order Detail</h1>
-    <div class="account-title-line"></div>
-    <div id="order-detail-host" class="account-stack"></div>
+  <div class="account-main account-main--orders">
+    <header class="oh-hero">
+      <h1 class="oh-title">ORDER DETAIL</h1>
+      <div class="oh-title-accent" aria-hidden="true"></div>
+    </header>
+    <div id="order-detail-host" class="oh-stack"></div>
   </div>
 </section>
 {% endblock %}

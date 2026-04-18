@@ -64,26 +64,56 @@
       : "Use your registered account credentials.";
   }
 
-  async function redirectAfterAuth(user) {
+  async function redirectAfterAuth(user, isSignup) {
     if (!user) {
       window.location.href = "/";
       return;
     }
     try {
       const idToken = await user.getIdToken(true);
+      localStorage.setItem("idToken", idToken);
+      localStorage.removeItem("userRole");
       const res = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
       });
       const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const hint = data && data.hint ? " " + data.hint : "";
+        const err = (data && data.error) ? String(data.error) : "HTTP " + res.status;
+        if (window.showToast) {
+          window.showToast(
+            "The server could not verify your sign-in. " +
+              err +
+              hint +
+              " Ensure GOOGLE_APPLICATION_CREDENTIALS points to a service account for the same Firebase project as FIREBASE_PROJECT_ID.",
+            "error"
+          );
+        }
+        return;
+      }
+      if (data && data.role) {
+        localStorage.setItem("userRole", data.role);
+      }
+      if (data && data.warning && window.showToast) {
+        window.showToast("Account note: " + data.warning, "warning");
+      }
+      if (window.showToast) {
+        window.showToast(isSignup ? "Account created." : "Signed in successfully.", "success");
+      }
       if (data && data.role === "admin") {
         window.location.href = "/admin";
         return;
       }
       window.location.href = "/";
-    } catch (_e) {
-      window.location.href = "/";
+    } catch (e) {
+      if (window.showToast) {
+        window.showToast(
+          "Network error while contacting the server. " + (e && e.message ? e.message : ""),
+          "error"
+        );
+      }
     }
   }
 
@@ -108,14 +138,13 @@
     el.submit.textContent = "Please wait...";
     try {
       let cred;
-      if (state.mode === "signup") {
+      const isSignup = state.mode === "signup";
+      if (isSignup) {
         cred = await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
-        showToast("Account created successfully.", "success");
       } else {
         cred = await window.firebaseAuth.signInWithEmailAndPassword(email, password);
-        showToast("Signed in successfully.", "success");
       }
-      await redirectAfterAuth(cred && cred.user);
+      await redirectAfterAuth(cred && cred.user, isSignup);
     } catch (e) {
       const msg = String(e && e.message ? e.message : "Authentication failed");
       showToast(msg, "error");
@@ -133,8 +162,7 @@
     const provider = new firebase.auth.GoogleAuthProvider();
     try {
       const result = await window.firebaseAuth.signInWithPopup(provider);
-      showToast("Signed in with Google.", "success");
-      await redirectAfterAuth(result && result.user);
+      await redirectAfterAuth(result && result.user, false);
     } catch (e) {
       const msg = String(e && e.message ? e.message : "");
       const code = e && e.code ? String(e.code) : "";
@@ -184,9 +212,9 @@
       .getRedirectResult()
       .then((result) => {
         if (result && result.user) {
-          showToast("Signed in with Google.", "success");
-          redirectAfterAuth(result.user);
+          return redirectAfterAuth(result.user, false);
         }
+        return undefined;
       })
       .catch((err) => {
         if (err && err.code) {

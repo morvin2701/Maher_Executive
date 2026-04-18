@@ -112,6 +112,15 @@
     return { ...product, _category: category, _subcategory: subcategory, _sizes: sizes, _colors: colors };
   }
 
+  /** Men's only — do not use .includes("men"): the word "women" contains "men" as a substring. */
+  function isMenDepartment(p) {
+    const c = p._category;
+    const s = p._subcategory;
+    if (c.includes("women") || s.includes("women")) return false;
+    if (c.includes("kids") || s.includes("kids")) return false;
+    return c.startsWith("men") || s.startsWith("men");
+  }
+
   function applyMenFilters() {
     const { categories, sizes, colors, prices } = menState.filters;
     let out = menState.allProducts.slice();
@@ -193,11 +202,16 @@
   }
 
   async function initMenPage() {
-    const res = await fetch("/api/products?limit=300");
-    const data = await res.json();
-    const all = (data.products || []).map(normalizeProduct);
-    menState.allProducts = all.filter((p) => p._category.includes("men") || p._subcategory.includes("men"));
-    if (!menState.allProducts.length) menState.allProducts = all;
+    let res = await fetch("/api/products?limit=300&category=men");
+    let data = await res.json();
+    let list = (data.products || []).map(normalizeProduct);
+    if (!list.length) {
+      res = await fetch("/api/products?limit=300");
+      data = await res.json();
+      const all = (data.products || []).map(normalizeProduct);
+      list = all.filter(isMenDepartment);
+    }
+    menState.allProducts = list;
     menState.filtered = menState.allProducts.slice();
     renderMenProducts();
   }

@@ -1,4 +1,5 @@
 from functools import wraps
+from typing import Optional
 
 from firebase_admin import auth
 from firebase_admin import firestore
@@ -29,7 +30,7 @@ def get_user_role(uid: str) -> str:
     return (doc.to_dict() or {}).get("role", "user")
 
 
-def ensure_user_document(uid: str, email: str, name: str | None):
+def ensure_user_document(uid: str, email: str, name: Optional[str] = None):
     try:
         db = get_firestore()
         ref = db.collection("users").document(uid)

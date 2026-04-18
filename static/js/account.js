@@ -5,7 +5,7 @@
   const page = shell.dataset.accountPage || "profile";
 
   function formatCurrency(value) {
-    return "₹" + Number(value || 0).toLocaleString("en-IN");
+    return "₹" + Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   function formatDate(raw) {
@@ -13,6 +13,40 @@
     const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return "Recent";
     return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  const MONTHS_UP = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+  function formatOrderDateLuxury(raw) {
+    if (!raw) return "—";
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return "—";
+    return MONTHS_UP[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+  }
+
+  function orderRefLuxury(id) {
+    const s = String(id || "").replace(/[^a-fA-F0-9]/g, "");
+    if (s.length >= 4) return "AU-" + s.slice(0, 4).toUpperCase();
+    return "AU-" + String(id || "0000").slice(0, 4).toUpperCase();
+  }
+
+  function escapeHtml(str) {
+    return String(str ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function orderStatusPill(order) {
+    const s = String(order.status || "").toLowerCase();
+    if (s.includes("deliver") || s === "delivered" || s === "completed") {
+      return { cls: "oh-pill oh-pill--delivered", label: "DELIVERED" };
+    }
+    if (s === "confirmed" || s.includes("transit") || s.includes("ship")) {
+      return { cls: "oh-pill oh-pill--transit", label: "IN TRANSIT" };
+    }
+    return { cls: "oh-pill oh-pill--transit", label: "PROCESSING" };
   }
 
   async function getHeaders() {
@@ -122,13 +156,6 @@
     });
   }
 
-  function orderStatusClass(status) {
-    const value = String(status || "").toLowerCase();
-    if (value.includes("deliver")) return "delivered";
-    if (value.includes("transit") || value.includes("ship")) return "transit";
-    return "pending";
-  }
-
   async function bindOrders(userCtx) {
     const host = document.getElementById("orders-list");
     if (!host) return;
@@ -136,53 +163,86 @@
       const payload = await fetchJson("/api/orders", { headers: userCtx.headers });
       const orders = payload.orders || [];
       if (!orders.length) {
-        host.innerHTML = '<div class="account-empty">No orders yet. Place your first order to see tracking details here.</div>';
+        host.innerHTML =
+          '<div class="oh-empty">No orders yet. Place your first acquisition to see tracking details here.</div>';
         return;
       }
       host.innerHTML = orders
         .map((order) => {
           const items = Array.isArray(order.items) ? order.items : [];
+          const pill = orderStatusPill(order);
           const lineItems = items
-            .slice(0, 3)
-            .map(
-              (item) =>
-                '<div class="order-item-row"><p>' +
-                (item.name || "Product") +
-                '</p><span>Qty ' +
-                Number(item.qty || 1) +
-                "</span></div>"
-            )
+            .map((item) => {
+              const qty = Number(item.qty || 1);
+              const unit = Number(item.price || 0);
+              const line = qty * unit;
+              const name = escapeHtml(item.name || "Product");
+              const thumb =
+                item.image && String(item.image).trim()
+                  ? '<div class="oh-line__thumb"><img src="' +
+                    escapeHtml(item.image) +
+                    '" alt="" loading="lazy" onerror="this.parentElement.classList.add(\'oh-line__thumb--empty\'); this.remove();" /></div>'
+                  : '<div class="oh-line__thumb oh-line__thumb--empty"></div>';
+              return (
+                '<div class="oh-line">' +
+                thumb +
+                '<div class="oh-line__meta">' +
+                '<p class="oh-line__name">' +
+                name +
+                "</p>" +
+                '<p class="oh-line__qty">QTY: ' +
+                qty +
+                "</p>" +
+                "</div>" +
+                '<div class="oh-line__price">' +
+                formatCurrency(line) +
+                "</div>" +
+                "</div>"
+              );
+            })
             .join("");
           return (
-            '<article class="order-card">' +
-            '<div class="order-card-head">' +
-            "<div><p>Order Ref.</p><h4>" +
-            String(order.id || "").toUpperCase() +
-            "</h4></div>" +
-            "<div><p>Date</p><h4>" +
-            formatDate(order.createdAt) +
-            "</h4></div>" +
-            "<div><p>Status</p><h4 class='order-status " +
-            orderStatusClass(order.status) +
-            "'>" +
-            String(order.status || "pending") +
-            "</h4></div>" +
-            '<a class="btn btn-outline" href="/account/orders/' +
+            '<article class="oh-card">' +
+            '<div class="oh-card__head">' +
+            '<div class="oh-card__col">' +
+            '<div class="oh-card__label">ORDER REF.</div>' +
+            '<div class="oh-card__ref">' +
+            orderRefLuxury(order.id) +
+            "</div>" +
+            "</div>" +
+            '<div class="oh-card__col">' +
+            '<div class="oh-card__label">DATE</div>' +
+            '<div class="oh-card__date">' +
+            formatOrderDateLuxury(order.createdAt) +
+            "</div>" +
+            "</div>" +
+            '<div class="oh-card__col oh-card__col--status">' +
+            '<div class="oh-card__label">STATUS</div>' +
+            '<span class="' +
+            pill.cls +
+            '">' +
+            pill.label +
+            "</span>" +
+            "</div>" +
+            '<a class="oh-track" href="/account/orders/' +
             encodeURIComponent(order.id) +
-            '">Track Order</a>' +
+            '">TRACK ORDER</a>' +
             "</div>" +
-            '<div class="order-card-items">' +
-            lineItems +
+            '<div class="oh-card__items">' +
+            (lineItems || '<p class="oh-line__empty muted">No line items.</p>') +
             "</div>" +
-            '<div class="order-total-row"><span>Acquisition Total</span><strong>' +
+            '<div class="oh-card__footer">' +
+            '<span class="oh-card__total-label">ACQUISITION TOTAL</span>' +
+            '<span class="oh-card__total-val">' +
             formatCurrency(order.total) +
-            "</strong></div>" +
+            "</span>" +
+            "</div>" +
             "</article>"
           );
         })
         .join("");
     } catch (err) {
-      host.innerHTML = '<div class="account-empty">Unable to load orders right now.</div>';
+      host.innerHTML = '<div class="oh-empty">Unable to load orders right now.</div>';
     }
   }
 
@@ -191,7 +251,7 @@
     if (!host) return;
     const orderId = shell.dataset.orderId || "";
     if (!orderId) {
-      host.innerHTML = '<div class="account-empty">Order reference missing.</div>';
+      host.innerHTML = '<div class="oh-empty">Order reference missing.</div>';
       return;
     }
     try {
@@ -199,47 +259,79 @@
         headers: userCtx.headers,
       });
       const items = Array.isArray(order.items) ? order.items : [];
+      const pill = orderStatusPill(order);
+      const lineItems = items
+        .map((item) => {
+          const qty = Number(item.qty || 1);
+          const unit = Number(item.price || 0);
+          const line = qty * unit;
+          const name = escapeHtml(item.name || "Product");
+          const thumb =
+            item.image && String(item.image).trim()
+              ? '<div class="oh-line__thumb"><img src="' +
+                escapeHtml(item.image) +
+                '" alt="" loading="lazy" onerror="this.parentElement.classList.add(\'oh-line__thumb--empty\'); this.remove();" /></div>'
+              : '<div class="oh-line__thumb oh-line__thumb--empty"></div>';
+          return (
+            '<div class="oh-line">' +
+            thumb +
+            '<div class="oh-line__meta">' +
+            '<p class="oh-line__name">' +
+            name +
+            "</p>" +
+            '<p class="oh-line__qty">QTY: ' +
+            qty +
+            "</p>" +
+            "</div>" +
+            '<div class="oh-line__price">' +
+            formatCurrency(line) +
+            "</div>" +
+            "</div>"
+          );
+        })
+        .join("");
       host.innerHTML =
-        '<article class="order-card">' +
-        '<div class="order-card-head">' +
-        "<div><p>Order Ref.</p><h4>" +
-        String(order.id || "").toUpperCase() +
-        "</h4></div>" +
-        "<div><p>Date</p><h4>" +
-        formatDate(order.createdAt) +
-        "</h4></div>" +
-        "<div><p>Status</p><h4 class='order-status " +
-        orderStatusClass(order.status) +
-        "'>" +
-        String(order.status || "pending") +
-        "</h4></div>" +
-        '<a class="btn btn-outline" href="/account/orders">Back to Orders</a>' +
+        '<article class="oh-card">' +
+        '<div class="oh-card__head">' +
+        '<div class="oh-card__col">' +
+        '<div class="oh-card__label">ORDER REF.</div>' +
+        '<div class="oh-card__ref">' +
+        orderRefLuxury(order.id) +
         "</div>" +
-        '<div class="order-card-items">' +
-        items
-          .map(
-            (item) =>
-              '<div class="order-item-row"><p>' +
-              (item.name || "Product") +
-              '</p><span>' +
-              Number(item.qty || 1) +
-              " x " +
-              formatCurrency(item.price || 0) +
-              "</span></div>"
-          )
-          .join("") +
         "</div>" +
-        '<div class="order-total-row"><span>Total Paid</span><strong>' +
+        '<div class="oh-card__col">' +
+        '<div class="oh-card__label">DATE</div>' +
+        '<div class="oh-card__date">' +
+        formatOrderDateLuxury(order.createdAt) +
+        "</div>" +
+        "</div>" +
+        '<div class="oh-card__col oh-card__col--status">' +
+        '<div class="oh-card__label">STATUS</div>' +
+        '<span class="' +
+        pill.cls +
+        '">' +
+        pill.label +
+        "</span>" +
+        "</div>" +
+        '<a class="oh-track" href="/account/orders">BACK TO ORDERS</a>' +
+        "</div>" +
+        '<div class="oh-card__items">' +
+        (lineItems || '<p class="oh-line__empty muted">No line items.</p>') +
+        "</div>" +
+        '<div class="oh-card__footer">' +
+        '<span class="oh-card__total-label">ACQUISITION TOTAL</span>' +
+        '<span class="oh-card__total-val">' +
         formatCurrency(order.total) +
-        "</strong></div>" +
+        "</span>" +
+        "</div>" +
         "</article>";
     } catch (err) {
-      host.innerHTML = '<div class="account-empty">Unable to load this order.</div>';
+      host.innerHTML = '<div class="oh-empty">Unable to load this order.</div>';
     }
   }
 
   function addressPayloadFromPrompt(existing) {
-    const label = window.prompt("Address label (e.g. Home, Office)", (existing && existing.label) || "Home");
+    const label = window.prompt("Address label (e.g. Holiday Home, Office)", (existing && existing.label) || "Home");
     if (!label) return null;
     const name = window.prompt("Recipient name", (existing && existing.name) || "");
     if (!name) return null;
@@ -255,7 +347,19 @@
     const country = window.prompt("Country", (existing && existing.country) || "India");
     if (!country) return null;
     const phone = window.prompt("Phone (optional)", (existing && existing.phone) || "") || "";
-    return { label, name, line1, line2, city, state, pincode, country, phone, isDefault: !!(existing && existing.isDefault) };
+    const isDefault = window.confirm("Set as default shipping address?");
+    return { label, name, line1, line2, city, state, pincode, country, phone, isDefault };
+  }
+
+  function addressLinesHtml(addr) {
+    const parts = [];
+    if (addr.line1) parts.push(addr.line1);
+    if (addr.line2) parts.push(addr.line2);
+    const cityState = [addr.city, addr.state].filter(Boolean).join(", ");
+    if (cityState) parts.push(cityState);
+    if (addr.pincode) parts.push(String(addr.pincode));
+    if (addr.country) parts.push(addr.country);
+    return parts.map((line) => '<p class="addr-card__line">' + escapeHtml(line) + "</p>").join("");
   }
 
   async function bindAddresses(userCtx) {
@@ -264,81 +368,107 @@
     if (!host || !addBtn) return;
 
     async function render() {
+      let res;
       try {
-        const payload = await fetchJson("/api/addresses", { headers: userCtx.headers });
-        const addresses = payload.addresses || [];
-        if (!addresses.length) {
-          host.innerHTML = '<div class="account-empty">No saved addresses. Use "Add New Residence" to create one.</div>';
-          return;
-        }
-        host.innerHTML = addresses
-          .map(
-            (addr) =>
-              '<article class="address-card">' +
-              '<div class="address-top"><p>' +
-              (addr.label || "Address") +
-              "</p>" +
-              (addr.isDefault ? '<span class="badge">Default</span>' : "") +
-              "</div>" +
-              "<h4>" +
-              (addr.name || "") +
-              "</h4>" +
-              "<p>" +
-              [addr.line1, addr.line2, addr.city, addr.state, addr.pincode, addr.country]
-                .filter(Boolean)
-                .join(", ") +
-              "</p>" +
-              '<div class="address-actions">' +
-              '<button data-edit="' +
-              addr.id +
-              '">Edit Address</button>' +
-              '<button data-remove="' +
-              addr.id +
-              '">Remove</button>' +
-              "</div>" +
-              "</article>"
-          )
-          .join("");
-
-        host.querySelectorAll("[data-edit]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const id = btn.getAttribute("data-edit");
-            const current = addresses.find((x) => x.id === id);
-            const payload = addressPayloadFromPrompt(current);
-            if (!payload) return;
-            try {
-              await fetchJson("/api/addresses/" + encodeURIComponent(id), {
-                method: "PUT",
-                headers: { "Content-Type": "application/json", ...userCtx.headers },
-                body: JSON.stringify(payload),
-              });
-              if (window.showToast) window.showToast("Address updated", "success");
-              render();
-            } catch (err) {
-              if (window.showToast) window.showToast(err.message || "Could not update address", "error");
-            }
-          });
-        });
-
-        host.querySelectorAll("[data-remove]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const id = btn.getAttribute("data-remove");
-            if (!window.confirm("Remove this address?")) return;
-            try {
-              await fetchJson("/api/addresses/" + encodeURIComponent(id), {
-                method: "DELETE",
-                headers: userCtx.headers,
-              });
-              if (window.showToast) window.showToast("Address removed", "success");
-              render();
-            } catch (err) {
-              if (window.showToast) window.showToast(err.message || "Could not remove address", "error");
-            }
-          });
-        });
-      } catch (err) {
-        host.innerHTML = '<div class="account-empty">Unable to load addresses right now.</div>';
+        res = await fetch("/api/addresses", { headers: userCtx.headers });
+      } catch (_net) {
+        host.innerHTML =
+          '<div class="addr-empty">Network error. Check your connection and try again.</div>';
+        return;
       }
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_e) {
+        data = {};
+      }
+      if (!res.ok) {
+        host.innerHTML =
+          '<div class="addr-empty">Could not load addresses: ' +
+          escapeHtml(data.error || String(res.status)) +
+          "</div>";
+        return;
+      }
+      const addresses = Array.isArray(data.addresses) ? data.addresses : [];
+      if (data.warning && window.console && console.warn) {
+        console.warn("addresses:", data.warning);
+      }
+      if (!addresses.length) {
+        host.innerHTML =
+          '<div class="addr-empty">No saved addresses yet. Use <strong>ADD NEW RESIDENCE</strong> below to create one.</div>';
+        return;
+      }
+      host.innerHTML = addresses
+        .map((addr) => {
+          const id = escapeHtml(addr.id || "");
+          const label = escapeHtml((addr.label || "Address").toUpperCase());
+          const nm = escapeHtml(addr.name || "");
+          const defBadge = addr.isDefault ? '<span class="addr-card__badge">DEFAULT</span>' : "";
+          return (
+            '<article class="addr-card" data-address-id="' +
+            id +
+            '">' +
+            '<div class="addr-card__top">' +
+            '<span class="addr-card__label">' +
+            label +
+            "</span>" +
+            defBadge +
+            "</div>" +
+            '<h2 class="addr-card__name">' +
+            nm +
+            "</h2>" +
+            '<div class="addr-card__body">' +
+            addressLinesHtml(addr) +
+            "</div>" +
+            '<div class="addr-card__foot">' +
+            '<button type="button" class="addr-card__edit" data-edit="' +
+            id +
+            '">EDIT ADDRESS</button>' +
+            '<button type="button" class="addr-card__remove" data-remove="' +
+            id +
+            '">REMOVE</button>' +
+            "</div>" +
+            "</article>"
+          );
+        })
+        .join("");
+
+      host.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-edit");
+          const current = addresses.find((x) => x.id === id);
+          const payload = addressPayloadFromPrompt(current);
+          if (!payload) return;
+          try {
+            await fetchJson("/api/addresses/" + encodeURIComponent(id), {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", ...userCtx.headers },
+              body: JSON.stringify(payload),
+            });
+            if (window.showToast) window.showToast("Address updated", "success");
+            render();
+          } catch (err) {
+            if (window.showToast) window.showToast(err.message || "Could not update address", "error");
+          }
+        });
+      });
+
+      host.querySelectorAll("[data-remove]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-remove");
+          if (!window.confirm("Remove this address?")) return;
+          try {
+            await fetchJson("/api/addresses/" + encodeURIComponent(id), {
+              method: "DELETE",
+              headers: userCtx.headers,
+            });
+            if (window.showToast) window.showToast("Address removed", "success");
+            render();
+          } catch (err) {
+            if (window.showToast) window.showToast(err.message || "Could not remove address", "error");
+          }
+        });
+      });
     }
 
     addBtn.addEventListener("click", async () => {
@@ -350,7 +480,7 @@
           headers: { "Content-Type": "application/json", ...userCtx.headers },
           body: JSON.stringify(payload),
         });
-        if (window.showToast) window.showToast("Address added", "success");
+        if (window.showToast) window.showToast("Address saved", "success");
         render();
       } catch (err) {
         if (window.showToast) window.showToast(err.message || "Could not add address", "error");

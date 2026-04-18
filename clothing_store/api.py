@@ -36,13 +36,93 @@ def _serialize(value):
         return {k: _serialize(v) for k, v in value.items()}
     if isinstance(value, list):
         return [_serialize(v) for v in value]
+    # Firestore Timestamp / proto (not always datetime subclass in all SDK versions)
+    if hasattr(value, "seconds") and hasattr(value, "nanoseconds"):
+        try:
+            return datetime.fromtimestamp(
+                float(value.seconds) + float(value.nanoseconds) / 1e9,
+                tz=timezone.utc,
+            ).isoformat()
+        except Exception:
+            pass
+    if hasattr(value, "ToDatetime"):
+        try:
+            dt = value.ToDatetime()
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+        except Exception:
+            pass
+    if hasattr(value, "timestamp") and callable(getattr(value, "timestamp", None)):
+        try:
+            ts = value.timestamp()
+            if isinstance(ts, (int, float)):
+                return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        except Exception:
+            pass
     return value
+
+
+def _clear_other_default_addresses(db, uid: str, keep_id: str) -> None:
+    coll = db.collection("users").document(uid).collection("addresses")
+    for d in coll.stream():
+        if d.id == keep_id:
+            continue
+        row = d.to_dict() or {}
+        if row.get("isDefault"):
+            coll.document(d.id).update({"isDefault": False, "updatedAt": firestore.SERVER_TIMESTAMP})
 
 
 def _as_datetime(value):
     if isinstance(value, datetime):
         return value
     return None
+
+
+def _coupon_compute_discount(row: dict, subtotal: float) -> float:
+    """Discount amount from Firestore coupon doc and cart subtotal."""
+    subtotal = max(0.0, float(subtotal or 0))
+    if subtotal <= 0:
+        return 0.0
+    ctype = str(row.get("type") or "percentage").lower()
+    value = float(row.get("value") or 0)
+    if ctype == "fixed":
+        return round(min(max(0.0, value), subtotal), 2)
+    return round(min(subtotal * max(0.0, value) / 100.0, subtotal), 2)
+
+
+def _coupon_validation_error(row: dict):
+    """Return error key if coupon cannot be applied, else None."""
+    status = str(row.get("status") or "").lower()
+    if status != "active":
+        return "inactive"
+    expires = _as_datetime(row.get("expiresAt"))
+    now = datetime.now(timezone.utc)
+    if expires is not None:
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires < now:
+            return "expired"
+    used = int(row.get("usedCount") or 0)
+    limit = int(row.get("usageLimit") or 0)
+    if limit > 0 and used >= limit:
+        return "exhausted"
+    return None
+
+
+def _get_coupon_doc_by_code(db, code: str):
+    """Return (document_ref, snapshot_dict) or (None, None)."""
+    code = str(code or "").strip().upper()
+    if not code:
+        return None, None
+    try:
+        docs = list(db.collection("coupons").where("code", "==", code).limit(1).stream())
+    except Exception:
+        return None, None
+    if not docs:
+        return None, None
+    d = docs[0]
+    return d.reference, d.to_dict() or {}
 
 
 def _slugify(value: str) -> str:
@@ -1857,6 +1937,55 @@ def admin_put_system_settings(decoded):
     return jsonify({"ok": True, "settings": _serialize(merged_remote)})
 
 
+@bp.post("/coupons/validate")
+def validate_coupon_public():
+    """Validate a promo code against Firestore (admin-managed coupons only)."""
+    data = request.get_json(force=True, silent=True) or {}
+    code = str(data.get("code") or "").strip().upper()
+    subtotal = float(data.get("subtotal") or 0)
+    if not code:
+        return jsonify({"ok": False, "error": "code_required"}), 400
+    db = get_firestore()
+    _ref, row = _get_coupon_doc_by_code(db, code)
+    if not row:
+        return jsonify({"ok": False, "error": "invalid"})
+    err = _coupon_validation_error(row)
+    if err:
+        return jsonify({"ok": False, "error": err})
+    discount = _coupon_compute_discount(row, subtotal)
+    return jsonify(
+        {
+            "ok": True,
+            "code": code,
+            "discount": round(discount, 2),
+            "type": str(row.get("type") or "percentage"),
+            "value": float(row.get("value") or 0),
+        }
+    )
+
+
+@firestore.transactional
+def _transaction_set_order_and_touch_coupon(transaction, coupon_ref, order_ref, order_data):
+    if coupon_ref is not None:
+        snap = coupon_ref.get(transaction=transaction)
+        if not snap.exists:
+            raise ValueError("invalid_coupon")
+        row = snap.to_dict() or {}
+        err = _coupon_validation_error(row)
+        if err:
+            raise ValueError("coupon_invalid")
+        used = int(row.get("usedCount") or 0)
+        limit = int(row.get("usageLimit") or 0)
+        if limit > 0 and used >= limit:
+            raise ValueError("coupon_exhausted")
+    transaction.set(order_ref, order_data)
+    if coupon_ref is not None:
+        transaction.update(
+            coupon_ref,
+            {"usedCount": firestore.Increment(1), "updatedAt": firestore.SERVER_TIMESTAMP},
+        )
+
+
 @bp.post("/orders")
 @login_required_json
 def create_order(decoded):
@@ -1870,9 +1999,36 @@ def create_order(decoded):
     subtotal = float(data.get("subtotal", 0))
     shipping = float(data.get("shipping", 0))
     tax = float(data.get("tax", 0))
-    total = float(data.get("total", subtotal + shipping + tax))
-    oid = uuid.uuid4().hex[:16]
+    client_discount = float(data.get("discount") or 0)
+    client_total = float(data.get("total", subtotal + shipping + tax))
+    coupon_code = str(data.get("couponCode") or "").strip().upper()
+
     db = get_firestore()
+    server_discount = 0.0
+    coupon_ref = None
+
+    if coupon_code:
+        ref, row = _get_coupon_doc_by_code(db, coupon_code)
+        if not row:
+            return jsonify({"error": "invalid coupon"}), 400
+        err = _coupon_validation_error(row)
+        if err:
+            return jsonify({"error": "invalid coupon"}), 400
+        server_discount = _coupon_compute_discount(row, subtotal)
+        coupon_ref = ref
+    else:
+        if client_discount > 0.5:
+            return jsonify({"error": "discount not allowed"}), 400
+
+    if abs(client_discount - server_discount) > 0.5:
+        return jsonify({"error": "discount mismatch"}), 400
+
+    server_total = round(subtotal + shipping + tax - server_discount, 2)
+    if abs(client_total - server_total) > 1.0:
+        return jsonify({"error": "total mismatch"}), 400
+
+    oid = uuid.uuid4().hex[:16]
+    order_ref = db.collection("orders").document(oid)
     order = {
         "userId": uid,
         "items": items,
@@ -1883,16 +2039,36 @@ def create_order(decoded):
         "paymentId": data.get("paymentId") or "",
         "paymentStatus": payment_status,
         "subtotal": subtotal,
-        "discount": float(data.get("discount") or 0),
+        "discount": server_discount,
+        "couponCode": coupon_code,
         "shipping": shipping,
         "tax": tax,
-        "total": total,
+        "total": server_total,
         "trackingNumber": "",
         "courier": "",
         "createdAt": firestore.SERVER_TIMESTAMP,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     }
-    db.collection("orders").document(oid).set(order)
+    try:
+        if coupon_ref is None:
+            order_ref.set(order)
+        else:
+            transaction = db.transaction()
+            _transaction_set_order_and_touch_coupon(transaction, coupon_ref, order_ref, order)
+    except ValueError as exc:
+        key = str(exc)
+        friendly = {
+            "invalid_coupon": "Invalid promotion code.",
+            "coupon_invalid": "This promotion is inactive or expired.",
+            "coupon_exhausted": "This promotion has reached its usage limit.",
+        }.get(
+            key,
+            "This promotion could not be applied. Remove the code or try again.",
+        )
+        return jsonify({"error": friendly}), 400
+    except Exception:
+        current_app.logger.exception("create_order failed")
+        return jsonify({"error": "order failed"}), 500
     return jsonify({"orderId": oid})
 
 
@@ -1931,13 +2107,17 @@ def get_my_order(decoded, order_id):
 def list_addresses(decoded):
     uid = decoded["uid"]
     db = get_firestore()
-    docs = db.collection("users").document(uid).collection("addresses").stream()
     addresses = []
-    for d in docs:
-        row = d.to_dict() or {}
-        row["id"] = d.id
-        addresses.append(_serialize(row))
-    addresses.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+    try:
+        docs = db.collection("users").document(uid).collection("addresses").stream()
+        for d in docs:
+            row = d.to_dict() or {}
+            row["id"] = d.id
+            addresses.append(_serialize(row))
+        addresses.sort(key=lambda x: str(x.get("createdAt") or ""), reverse=True)
+    except Exception:
+        current_app.logger.exception("list_addresses failed")
+        return jsonify({"addresses": [], "warning": "firestore_unavailable"})
     return jsonify({"addresses": addresses})
 
 
@@ -1968,6 +2148,8 @@ def create_address(decoded):
     }
     ref = db.collection("users").document(uid).collection("addresses").document(aid)
     ref.set(doc)
+    if doc.get("isDefault"):
+        _clear_other_default_addresses(db, uid, aid)
     return jsonify({"id": aid})
 
 
@@ -1997,6 +2179,8 @@ def update_address(decoded, address_id):
     if not ref.get().exists:
         return jsonify({"error": "Address not found"}), 404
     ref.set(patch, merge=True)
+    if patch.get("isDefault") is True:
+        _clear_other_default_addresses(db, uid, address_id)
     return jsonify({"ok": True})
 
 

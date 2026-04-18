@@ -8,5 +8,9 @@
     firebase.initializeApp(cfg);
   }
   window.firebaseAuth = firebase.auth();
-  window.firebaseDb = firebase.firestore();
+  try {
+    window.firebaseDb = firebase.firestore();
+  } catch (_e) {
+    window.firebaseDb = null;
+  }
 })();

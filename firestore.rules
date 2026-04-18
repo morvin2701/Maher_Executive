@@ -43,7 +43,7 @@ service cloud.firestore {
     }
 
     match /coupons/{id} {
-      allow read: if request.auth != null;
+      allow read: if false;
       allow write: if isAdmin();
     }
 
