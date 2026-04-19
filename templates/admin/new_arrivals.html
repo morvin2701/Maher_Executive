@@ -252,7 +252,13 @@
       els.list.querySelectorAll("[data-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete");
-          if (!id || !window.confirm("Delete this arrival slot?")) return;
+          const ok =
+            id &&
+            (await window.MeDialog.confirm("Delete this arrival slot?", {
+              title: "Delete arrival slot",
+              okText: "Delete",
+            }));
+          if (!ok) return;
           const h = await bearerHeaders();
           const res = await fetch("/api/admin/new-arrivals/" + encodeURIComponent(id), {
             method: "DELETE",

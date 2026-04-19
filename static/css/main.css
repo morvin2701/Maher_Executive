@@ -7430,3 +7430,155 @@ textarea:focus {
     align-items: flex-start;
   }
 }
+
+/* ——— Maher Executive custom dialogs (replaces native prompt/confirm/alert) ——— */
+.me-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.me-dialog-overlay[hidden] {
+  display: none !important;
+}
+
+.me-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 6, 12, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.me-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 440px);
+  max-height: min(88vh, 720px);
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(165deg, rgba(22, 26, 38, 0.98), rgba(10, 12, 18, 0.98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(201, 169, 110, 0.12) inset;
+  padding: 1.35rem 1.35rem 1.15rem;
+}
+
+.me-dialog-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+}
+
+.me-dialog-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: #0b0b0b;
+  background: linear-gradient(135deg, #e8d5b0, #c9a96e);
+}
+
+.me-dialog-brand-text {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.me-dialog-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.me-dialog-sub {
+  margin: -0.25rem 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.me-dialog-message {
+  margin: 0 0 1rem;
+  color: #eaeaea;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.me-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.me-dialog-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.me-dialog-input,
+.me-dialog-textarea {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+.me-dialog-textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.me-dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.5rem 0 0.85rem;
+  font-size: 0.88rem;
+  color: #ddd;
+}
+
+.me-dialog-check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #c9a96e;
+}
+
+.me-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+
+.me-dialog-actions--split {
+  justify-content: space-between;
+}
+
+.me-dialog-primary {
+  min-width: 112px;
+}
+
+.admin-lux-content .me-dialog .btn-outline {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #f0f0f0;
+}
+
+.admin-lux-content .me-dialog .btn-outline:hover {
+  border-color: rgba(201, 169, 110, 0.55);
+  color: #fff;
+}

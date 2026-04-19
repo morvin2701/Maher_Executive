@@ -197,10 +197,14 @@
       }).join("");
 
       body.querySelectorAll(".admin-treasury-more").forEach(function (btn) {
-        btn.addEventListener("click", function () {
+        btn.addEventListener("click", async function () {
           var ref = btn.getAttribute("data-ref") || "";
           var ord = btn.getAttribute("data-ord") || "";
-          var choice = window.prompt("Copy: type ref, ord, or cancel", "ref");
+          var choice = await window.MeDialog.prompt(
+            "Type ref for payment reference, or ord for acquisition id.",
+            "ref",
+            { title: "Copy to clipboard", fieldLabel: "ref or ord" }
+          );
           if (!choice) return;
           var txt = choice.toLowerCase().indexOf("ord") === 0 ? ord : ref;
           if (!txt) return;
@@ -243,10 +247,24 @@
   });
 
   payoutBtn.addEventListener("click", async function () {
-    var amtRaw = window.prompt("Payout amount (INR), optional", "");
-    var note = window.prompt("Internal note", "") || "";
-    var payload = { note: note };
-    if (amtRaw !== null && String(amtRaw).trim() !== "") {
+    var formData = await window.MeDialog.form({
+      title: "Payout request",
+      subtitle: "Optional amount in INR and an internal note for finance.",
+      okText: "Submit",
+      fields: [
+        {
+          name: "amountInr",
+          label: "Amount (INR)",
+          type: "number",
+          placeholder: "Leave blank if unspecified",
+        },
+        { name: "note", label: "Internal note", type: "textarea", placeholder: "Notes for treasury…" },
+      ],
+    });
+    if (!formData) return;
+    var payload = { note: String(formData.note || "").trim() };
+    var amtRaw = String(formData.amountInr || "").trim();
+    if (amtRaw !== "") {
       var n = parseFloat(amtRaw.replace(/,/g, ""));
       if (!Number.isNaN(n)) payload.amountInr = n;
     }

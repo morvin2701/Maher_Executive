@@ -156,10 +156,16 @@
       load();
     });
 
-    els.inviteBtn.addEventListener("click", () => {
-      const email = window.prompt("Direct invite email");
-      if (!email) return;
-      window.location.href = "mailto:" + encodeURIComponent(email) + "?subject=" + encodeURIComponent("Maher Executive Invite");
+    els.inviteBtn.addEventListener("click", async () => {
+      const email = await window.MeDialog.prompt("We will open your mail client to send the invite.", "", {
+        title: "Direct invite",
+        fieldLabel: "Email",
+        inputType: "email",
+        placeholder: "customer@example.com",
+      });
+      if (!email || !String(email).trim()) return;
+      window.location.href =
+        "mailto:" + encodeURIComponent(email.trim()) + "?subject=" + encodeURIComponent("Maher Executive Invite");
     });
 
     await load();

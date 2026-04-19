@@ -113,10 +113,26 @@
           const id = btn.getAttribute("data-edit");
           const row = state.rows.find((x) => x.id === id);
           if (!id || !row) return;
-          const title = window.prompt("Asset title", row.title || "");
+          const formData = await window.MeDialog.form({
+            title: "Edit banner",
+            okText: "Save",
+            fields: [
+              { name: "title", label: "Asset title", type: "text", value: row.title || "", required: true },
+              { name: "subtitle", label: "Subtitle", type: "text", value: row.subtitle || "" },
+              {
+                name: "status",
+                label: "Status (live / scheduled / draft)",
+                type: "text",
+                value: row.status || "draft",
+                required: true,
+              },
+            ],
+          });
+          if (!formData) return;
+          const title = String(formData.title || "").trim();
           if (!title) return;
-          const subtitle = window.prompt("Asset subtitle", row.subtitle || "") || "";
-          const status = window.prompt("Status: live / scheduled / draft", row.status || "draft") || row.status;
+          const subtitle = String(formData.subtitle || "").trim();
+          const status = String(formData.status || row.status || "draft").trim();
           const h = await window.getBearerHeaders();
           const res = await fetch("/api/admin/banners/" + encodeURIComponent(id), {
             method: "PUT",
@@ -138,7 +154,8 @@
       root.querySelectorAll("[data-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete");
-          if (!id || !window.confirm("Delete this asset?")) return;
+          const ok = id && (await window.MeDialog.confirm("Delete this asset?", { title: "Delete banner", okText: "Delete" }));
+          if (!ok) return;
           const h = await window.getBearerHeaders();
           const res = await fetch("/api/admin/banners/" + encodeURIComponent(id), {
             method: "DELETE",
@@ -156,12 +173,34 @@
     }
 
     uploadBtn.addEventListener("click", async () => {
-      const title = window.prompt("Asset title");
-      if (!title) return;
-      const image = window.prompt("Image URL (Cloudinary preferred)");
-      if (!image) return;
-      const subtitle = window.prompt("Subtitle / placement note", "Hero Main - Home Page") || "";
-      const status = window.prompt("Status: live / scheduled / draft", "draft") || "draft";
+      const fd = await window.MeDialog.form({
+        title: "New banner asset",
+        subtitle: "Provide image URL (Cloudinary preferred).",
+        okText: "Upload",
+        fields: [
+          { name: "title", label: "Asset title", type: "text", required: true },
+          {
+            name: "image",
+            label: "Image URL",
+            type: "text",
+            placeholder: "https://…",
+            required: true,
+          },
+          {
+            name: "subtitle",
+            label: "Subtitle / placement note",
+            type: "text",
+            value: "Hero Main - Home Page",
+          },
+          { name: "status", label: "Status (live / scheduled / draft)", type: "text", value: "draft", required: true },
+        ],
+      });
+      if (!fd) return;
+      const title = String(fd.title || "").trim();
+      const image = String(fd.image || "").trim();
+      if (!title || !image) return;
+      const subtitle = String(fd.subtitle || "").trim();
+      const status = String(fd.status || "draft").trim();
       const h = await window.getBearerHeaders();
       const res = await fetch("/api/admin/banners", {
         method: "POST",

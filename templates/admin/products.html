@@ -161,7 +161,9 @@
       els.body.querySelectorAll("[data-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete");
-          if (!id || !window.confirm("Delete this product?")) return;
+          const ok =
+            id && (await window.MeDialog.confirm("Delete this product?", { title: "Delete product", okText: "Delete" }));
+          if (!ok) return;
           const h = await window.getBearerHeaders();
           const res = await fetch("/api/admin/products/" + encodeURIComponent(id), { method: "DELETE", headers: { ...h } });
           if (!res.ok) {

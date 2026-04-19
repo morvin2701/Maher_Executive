@@ -330,25 +330,43 @@
     }
   }
 
-  function addressPayloadFromPrompt(existing) {
-    const label = window.prompt("Address label (e.g. Holiday Home, Office)", (existing && existing.label) || "Home");
-    if (!label) return null;
-    const name = window.prompt("Recipient name", (existing && existing.name) || "");
-    if (!name) return null;
-    const line1 = window.prompt("Address line 1", (existing && existing.line1) || "");
-    if (!line1) return null;
-    const line2 = window.prompt("Address line 2 (optional)", (existing && existing.line2) || "") || "";
-    const city = window.prompt("City", (existing && existing.city) || "");
-    if (!city) return null;
-    const state = window.prompt("State", (existing && existing.state) || "");
-    if (!state) return null;
-    const pincode = window.prompt("Pincode", (existing && existing.pincode) || "");
-    if (!pincode) return null;
-    const country = window.prompt("Country", (existing && existing.country) || "India");
-    if (!country) return null;
-    const phone = window.prompt("Phone (optional)", (existing && existing.phone) || "") || "";
-    const isDefault = window.confirm("Set as default shipping address?");
-    return { label, name, line1, line2, city, state, pincode, country, phone, isDefault };
+  async function addressPayloadFromDialog(existing) {
+    const Me = window.MeDialog;
+    if (!Me || typeof Me.form !== "function") {
+      if (window.showToast) window.showToast("Dialog UI not loaded.", "warning");
+      return null;
+    }
+    const ex = existing || {};
+    const data = await Me.form({
+      title: "Shipping address",
+      subtitle: "Deliver with precision — saved securely to your profile.",
+      okText: "Save address",
+      fields: [
+        { name: "label", label: "Address label", type: "text", value: ex.label || "Home", required: true },
+        { name: "name", label: "Recipient name", type: "text", value: ex.name || "", required: true },
+        { name: "line1", label: "Address line 1", type: "text", value: ex.line1 || "", required: true },
+        { name: "line2", label: "Address line 2 (optional)", type: "text", value: ex.line2 || "" },
+        { name: "city", label: "City", type: "text", value: ex.city || "", required: true },
+        { name: "state", label: "State", type: "text", value: ex.state || "", required: true },
+        { name: "pincode", label: "Pincode", type: "text", value: ex.pincode || "", required: true },
+        { name: "country", label: "Country", type: "text", value: ex.country || "India", required: true },
+        { name: "phone", label: "Phone (optional)", type: "text", value: ex.phone || "" },
+        { name: "isDefault", label: "Set as default shipping address", type: "checkbox", value: !!ex.isDefault },
+      ],
+    });
+    if (!data) return null;
+    return {
+      label: String(data.label || "").trim(),
+      name: String(data.name || "").trim(),
+      line1: String(data.line1 || "").trim(),
+      line2: String(data.line2 || "").trim(),
+      city: String(data.city || "").trim(),
+      state: String(data.state || "").trim(),
+      pincode: String(data.pincode || "").trim(),
+      country: String(data.country || "").trim(),
+      phone: String(data.phone || "").trim(),
+      isDefault: !!data.isDefault,
+    };
   }
 
   function addressLinesHtml(addr) {
@@ -437,7 +455,7 @@
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-edit");
           const current = addresses.find((x) => x.id === id);
-          const payload = addressPayloadFromPrompt(current);
+          const payload = await addressPayloadFromDialog(current);
           if (!payload) return;
           try {
             await fetchJson("/api/addresses/" + encodeURIComponent(id), {
@@ -456,7 +474,12 @@
       host.querySelectorAll("[data-remove]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-remove");
-          if (!window.confirm("Remove this address?")) return;
+          const ok = await window.MeDialog.confirm("Remove this address from your profile?", {
+            title: "Remove address",
+            okText: "Remove",
+            cancelText: "Keep",
+          });
+          if (!ok) return;
           try {
             await fetchJson("/api/addresses/" + encodeURIComponent(id), {
               method: "DELETE",
@@ -472,7 +495,7 @@
     }
 
     addBtn.addEventListener("click", async () => {
-      const payload = addressPayloadFromPrompt(null);
+      const payload = await addressPayloadFromDialog(null);
       if (!payload) return;
       try {
         await fetchJson("/api/addresses", {

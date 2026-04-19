@@ -341,10 +341,12 @@
     });
   }
 
-  function openUploadWidget() {
+  async function openUploadWidget() {
     const c = window.__CLOUDINARY__ || {};
     if (!window.cloudinary || !c.cloudName) {
-      alert("Cloudinary is not configured. Add credentials to enable uploads.");
+      await window.MeDialog.alert("Cloudinary is not configured. Add credentials to enable uploads.", {
+        title: "Upload unavailable",
+      });
       return;
     }
     const widget = cloudinary.createUploadWidget(
@@ -403,7 +405,7 @@
   async function saveProduct(publish) {
     const h = await bearerHeaders();
     if (!h.Authorization) {
-      alert("Sign in as admin first (Firebase Auth).");
+      await window.MeDialog.alert("Sign in as admin first (Firebase Auth).", { title: "Sign in required" });
       window.location.href = "/auth";
       return;
     }
@@ -411,12 +413,12 @@
     if (publish) {
       const err = validateForPublish(payload);
       if (err) {
-        alert(err);
+        await window.MeDialog.alert(err, { title: "Cannot publish" });
         return;
       }
     } else {
       if (!payload.name && !payload.slug) {
-        alert("Enter at least a product name or slug to save a draft.");
+        await window.MeDialog.alert("Enter at least a product name or slug to save a draft.", { title: "Draft incomplete" });
         return;
       }
       if (!payload.slug) payload.slug = slugify(payload.name) || "draft-" + Date.now().toString(36);
@@ -444,7 +446,7 @@
     const e = await res.json().catch(function () {
       return {};
     });
-    alert(e.error || "Save failed — ensure admin role in Firestore.");
+    await window.MeDialog.alert(e.error || "Save failed — ensure admin role in Firestore.", { title: "Save failed" });
   }
 
   document.getElementById("btn-draft").addEventListener("click", function () {

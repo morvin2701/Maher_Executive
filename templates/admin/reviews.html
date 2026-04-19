@@ -118,7 +118,8 @@
       root.querySelectorAll("[data-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete");
-          if (!id || !window.confirm("Delete this review?")) return;
+          const ok = id && (await window.MeDialog.confirm("Delete this review?", { title: "Delete review", okText: "Delete" }));
+          if (!ok) return;
           const h = await window.getBearerHeaders();
           const res = await fetch("/api/admin/reviews/" + encodeURIComponent(id), {
             method: "DELETE",

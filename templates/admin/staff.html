@@ -173,7 +173,15 @@
             return x.id === id;
           });
           if (!row) return;
-          var next = window.prompt("Clearance level (e.g. SUPER ADMIN, CATALOG MANAGER)", row.clearanceLevel || "");
+          var next = await window.MeDialog.prompt(
+            "e.g. SUPER ADMIN, CATALOG MANAGER",
+            row.clearanceLevel || "",
+            {
+              title: "Clearance level",
+              fieldLabel: "Clearance",
+              placeholder: "SUPER ADMIN, CATALOG MANAGER…",
+            }
+          );
           if (next === null || !String(next).trim()) return;
           var h = await bearerHeaders();
           var res = await fetch("/api/admin/staff/" + encodeURIComponent(id), {
@@ -193,15 +201,21 @@
       body.querySelectorAll("[data-more]").forEach(function (btn) {
         btn.addEventListener("click", async function () {
           var id = btn.getAttribute("data-more");
-          var choice = window.prompt(
-            "Type: status (online/away/offline), deactivate (toggle active), or delete",
-            "status"
+          var choice = await window.MeDialog.prompt(
+            'Enter action: status — change presence; deactivate — toggle seat; delete — remove permanently.',
+            "status",
+            { title: "Staff action", fieldLabel: "Action keyword" }
           );
           if (!choice) return;
           var h = await bearerHeaders();
           var low = choice.trim().toLowerCase();
           if (low.indexOf("del") === 0) {
-            if (!window.confirm("Remove this seat permanently?")) return;
+            var okDel = await window.MeDialog.confirm("Remove this seat permanently?", {
+              title: "Remove staff",
+              okText: "Remove",
+              cancelText: "Cancel",
+            });
+            if (!okDel) return;
             var res = await fetch("/api/admin/staff/" + encodeURIComponent(id), {
               method: "DELETE",
               headers: Object.assign({}, h),
@@ -230,7 +244,10 @@
             await load();
             return;
           }
-          var st = window.prompt("Status: online, offline, or away", "online");
+          var st = await window.MeDialog.prompt("online / offline / away", "online", {
+            title: "Presence status",
+            fieldLabel: "Status",
+          });
           if (!st || !String(st).trim()) return;
           var res = await fetch("/api/admin/staff/" + encodeURIComponent(id), {
             method: "PUT",
@@ -255,23 +272,25 @@
   }
 
   provisionBtn.addEventListener("click", async function () {
-    var name = window.prompt("Full name");
-    if (!name || !String(name).trim()) return;
-    var email = window.prompt("Work email");
-    if (!email || !String(email).trim()) return;
-    var clearance = window.prompt(
-      "Clearance level",
-      "CATALOG MANAGER"
-    );
-    if (clearance === null) return;
+    var data = await window.MeDialog.form({
+      title: "Provision account",
+      subtitle: "Authorize a new seat in the Maher Executive console.",
+      okText: "Provision",
+      fields: [
+        { name: "name", label: "Full name", type: "text", required: true },
+        { name: "email", label: "Work email", type: "email", required: true },
+        { name: "clearanceLevel", label: "Clearance level", type: "text", value: "CATALOG MANAGER", required: true },
+      ],
+    });
+    if (!data) return;
     var h = await bearerHeaders();
     var res = await fetch("/api/admin/staff", {
       method: "POST",
       headers: Object.assign({ "Content-Type": "application/json" }, h),
       body: JSON.stringify({
-        name: name.trim(),
-        email: email.trim(),
-        clearanceLevel: (clearance || "STAFF").trim(),
+        name: String(data.name || "").trim(),
+        email: String(data.email || "").trim(),
+        clearanceLevel: String(data.clearanceLevel || "STAFF").trim(),
       }),
     });
     var data = await res.json().catch(function () {

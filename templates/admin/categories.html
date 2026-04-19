@@ -139,7 +139,11 @@
           const id = btn.getAttribute("data-rename");
           const row = state.all.find((x) => x.id === id);
           if (!id || !row) return;
-          const name = window.prompt("Category name", row.name || "");
+          var nameRaw = await window.MeDialog.prompt("", row.name || "", {
+            title: "Rename category",
+            fieldLabel: "Category name",
+          });
+          const name = nameRaw != null ? String(nameRaw).trim() : "";
           if (!name) return;
           const h = await window.getBearerHeaders();
           const res = await fetch("/api/admin/categories/" + encodeURIComponent(id), {
@@ -160,7 +164,8 @@
       els.body.querySelectorAll("[data-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete");
-          if (!id || !window.confirm("Delete this category?")) return;
+          const ok = id && (await window.MeDialog.confirm("Delete this category?", { title: "Delete category", okText: "Delete" }));
+          if (!ok) return;
           const h = await window.getBearerHeaders();
           const res = await fetch("/api/admin/categories/" + encodeURIComponent(id), {
             method: "DELETE",
@@ -182,7 +187,12 @@
     });
 
     els.add.addEventListener("click", async () => {
-      const name = window.prompt("New category name");
+      var nameRaw = await window.MeDialog.prompt("", "", {
+        title: "New category",
+        fieldLabel: "Category name",
+        placeholder: "e.g. Outerwear",
+      });
+      const name = nameRaw != null ? String(nameRaw).trim() : "";
       if (!name) return;
       const h = await window.getBearerHeaders();
       const res = await fetch("/api/admin/categories", {

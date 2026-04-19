@@ -114,7 +114,8 @@
       els.body.querySelectorAll("[data-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete");
-          if (!id || !window.confirm("Delete this campaign?")) return;
+          const ok = id && (await window.MeDialog.confirm("Delete this campaign?", { title: "Delete coupon", okText: "Delete" }));
+          if (!ok) return;
           const h = await window.getBearerHeaders();
           const res = await fetch("/api/admin/coupons/" + encodeURIComponent(id), {
             method: "DELETE",
@@ -144,12 +145,31 @@
     }
 
     els.newBtn.addEventListener("click", async () => {
-      const code = window.prompt("Promo code (e.g. WINTER-EXP)");
+      const fd = await window.MeDialog.form({
+        title: "New promo campaign",
+        okText: "Create",
+        fields: [
+          { name: "code", label: "Promo code", type: "text", placeholder: "WINTER-EXP", required: true },
+          {
+            name: "type",
+            label: "Type",
+            type: "text",
+            value: "percentage",
+            placeholder: "percentage or fixed",
+            required: true,
+          },
+          { name: "value", label: "Value", type: "number", value: "10", required: true },
+          { name: "usageLimit", label: "Usage limit", type: "number", value: "100", required: true },
+          { name: "expiresAt", label: "Expires (YYYY-MM-DD)", type: "text", placeholder: "Optional" },
+        ],
+      });
+      if (!fd) return;
+      const code = String(fd.code || "").trim();
       if (!code) return;
-      const type = window.prompt("Type: percentage or fixed", "percentage");
-      const valueRaw = window.prompt("Value", "10");
-      const usageRaw = window.prompt("Usage limit", "100");
-      const expiresRaw = window.prompt("Expires at (YYYY-MM-DD) optional", "");
+      const type = fd.type;
+      const valueRaw = fd.value;
+      const usageRaw = fd.usageLimit;
+      const expiresRaw = String(fd.expiresAt || "").trim();
       const body = {
         code: code,
         type: String(type || "percentage").toLowerCase().includes("fixed") ? "fixed" : "percentage",

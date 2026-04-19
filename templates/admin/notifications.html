@@ -331,7 +331,8 @@
       els.list.querySelectorAll("[data-delete]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const id = btn.getAttribute("data-delete");
-          if (!id || !window.confirm("Delete this broadcast?")) return;
+          const ok = id && (await window.MeDialog.confirm("Delete this broadcast?", { title: "Delete broadcast", okText: "Delete" }));
+          if (!ok) return;
           const h = await bearerHeaders();
           const res = await fetch("/api/admin/notifications/" + encodeURIComponent(id), {
             method: "DELETE",
