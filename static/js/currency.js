@@ -51,7 +51,7 @@
 
   async function refreshRates() {
     try {
-      const res = await fetch("https://api.frankfurter.app/latest?from=INR");
+      const res = await fetch("/api/currency/rates?from=INR");
       if (!res.ok) return;
       const data = await res.json();
       if (!data || !data.rates) return;

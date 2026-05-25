@@ -55,6 +55,30 @@ def ensure_user_document(uid: str, email: str, name: Optional[str] = None):
         return
 
 
+def login_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        # In a real session-based app, we'd check session.get("uid")
+        # Since this app uses Firebase client-side, we check for the token.
+        # However, Flask doesn't see localStorage. 
+        # For true SSR protection, we would need to use Firebase Session Cookies.
+        # For now, we will implement the decorators to be ready for session integration.
+        return f(*args, **kwargs)
+
+    return wrapper
+
+
+def admin_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        # Placeholder for session-based admin check.
+        # Currently, the app relies on client-side JS for page-level auth.
+        # To truly secure this, we need to implement Firebase Session Cookies.
+        return f(*args, **kwargs)
+
+    return wrapper
+
+
 def login_required_json(f):
     @wraps(f)
     def wrapper(*args, **kwargs):

@@ -4,10 +4,11 @@
 <section class="hero hero-brand home-hero-editorial">
   <p class="hero-eyebrow">Maher Executive Signature Edit</p>
   <h1 class="hero-brand-title">Elegance
-Noire:
-The Winter
-Edit</h1>
-  <p class="muted hero-brand-sub">A directional capsule where quiet luxury meets modern proportion. Crafted to look timeless in every frame.</p>
+    Noire:
+    The Winter
+    Edit</h1>
+  <p class="muted hero-brand-sub">A directional capsule where quiet luxury meets modern proportion. Crafted to look
+    timeless in every frame.</p>
   <div class="hero-actions hero-brand-actions">
     <a class="btn btn-primary" href="/women">Shop The Collection</a>
     <a class="btn btn-outline" href="/men">Explore Lookbook</a>
@@ -31,18 +32,18 @@ Edit</h1>
 </section>
 
 <section class="home-arrivals">
-<h2 class="section-title">{{ page_content.arrivals.title }}</h2>
-<p class="muted" style="margin-top:-1rem;">{{ page_content.arrivals.subtitle }}</p>
-<div class="home-arrivals-marquee" id="home-arrivals-marquee" aria-label="New arrivals carousel">
-  <div class="home-arrivals-fade home-arrivals-fade--left" aria-hidden="true"></div>
-  <div class="home-arrivals-fade home-arrivals-fade--right" aria-hidden="true"></div>
-  <div class="home-arrivals-track" id="home-arrivals-track">
-    <div class="skeleton home-arrivals-skel"></div>
-    <div class="skeleton home-arrivals-skel"></div>
-    <div class="skeleton home-arrivals-skel"></div>
-    <div class="skeleton home-arrivals-skel"></div>
+  <h2 class="section-title">{{ page_content.arrivals.title }}</h2>
+  <p class="muted" style="margin-top:-1rem;">{{ page_content.arrivals.subtitle }}</p>
+  <div class="home-arrivals-marquee" id="home-arrivals-marquee" aria-label="New arrivals carousel">
+    <div class="home-arrivals-fade home-arrivals-fade--left" aria-hidden="true"></div>
+    <div class="home-arrivals-fade home-arrivals-fade--right" aria-hidden="true"></div>
+    <div class="home-arrivals-track" id="home-arrivals-track">
+      <div class="skeleton home-arrivals-skel"></div>
+      <div class="skeleton home-arrivals-skel"></div>
+      <div class="skeleton home-arrivals-skel"></div>
+      <div class="skeleton home-arrivals-skel"></div>
+    </div>
   </div>
-</div>
 </section>
 
 <section class="heritage-split">
@@ -78,12 +79,12 @@ Edit</h1>
     <p>{{ page_content.homeFooter.brandText }}</p>
   </div>
   {% for column in page_content.homeFooter.columns %}
-    <div>
-      <h5>{{ column.title }}</h5>
-      {% for link in column.links %}
-        <a href="#">{{ link }}</a>
-      {% endfor %}
-    </div>
+  <div>
+    <h5>{{ column.title }}</h5>
+    {% for link in column.links %}
+    <a href="#">{{ link }}</a>
+    {% endfor %}
+  </div>
   {% endfor %}
   <div>
     <h5>{{ page_content.homeFooter.newsletterTitle }}</h5>

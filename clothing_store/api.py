@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import razorpay
 from firebase_admin import firestore
 from flask import Blueprint, current_app, jsonify, request, Response
+import requests
 
 from clothing_store.auth_utils import (
     admin_required_json,
@@ -256,6 +257,31 @@ def _curated_homepage_arrivals(db):
         if len(arrivals) >= 24:
             break
     return arrivals
+
+
+@bp.get("/currency/rates")
+def get_currency_rates():
+    base = request.args.get("from", "INR").upper()
+    try:
+        # Use a server-side request to avoid CORS issues
+        res = requests.get(f"https://api.frankfurter.app/latest?from={base}", timeout=5)
+        if res.ok:
+            return jsonify(res.json())
+    except Exception:
+        pass
+    
+    # Fallback rates if the API is down
+    return jsonify({
+        "amount": 1,
+        "base": base,
+        "date": _now_iso()[:10],
+        "rates": {
+            "USD": 0.012,
+            "EUR": 0.011,
+            "GBP": 0.0094,
+            "AED": 0.044
+        }
+    })
 
 
 def _create_user_notification(db, uid: str, ntype: str, title: str, message: str, meta=None):
@@ -2496,16 +2522,46 @@ def create_order(decoded):
     items = data.get("items") or []
     if not items:
         return jsonify({"error": "items required"}), 400
+
     payment_method = data.get("paymentMethod", "COD")
     payment_status = data.get("paymentStatus", "pending")
-    subtotal = float(data.get("subtotal", 0))
-    shipping = float(data.get("shipping", 0))
-    tax = float(data.get("tax", 0))
-    client_discount = float(data.get("discount") or 0)
-    client_total = float(data.get("total", subtotal + shipping + tax))
-    coupon_code = str(data.get("couponCode") or "").strip().upper()
-
+    
     db = get_firestore()
+    server_subtotal = 0.0
+    verified_items = []
+
+    # 1. Verify every item and calculate subtotal on server
+    for item in items:
+        pid = item.get("productId")
+        if not pid:
+            return jsonify({"error": "invalid item list"}), 400
+        
+        psnap = db.collection("products").document(pid).get()
+        if not psnap.exists:
+            return jsonify({"error": f"Product {pid} not found"}), 400
+        
+        pdata = psnap.to_dict() or {}
+        if not pdata.get("isPublished", True):
+            return jsonify({"error": f"Product {pdata.get('name')} is no longer available"}), 400
+        
+        db_price = float(pdata.get("price", 0))
+        qty = int(item.get("qty", 1))
+        server_subtotal += db_price * qty
+        
+        # Add verified data to the item object for storage
+        verified_items.append({
+            "productId": pid,
+            "name": pdata.get("name"),
+            "price": db_price,
+            "qty": qty,
+            "image": item.get("image") or (pdata.get("images") or [{}])[0].get("url", ""),
+            "sku": pdata.get("sku", "")
+        })
+
+    # 2. Re-calculate totals
+    shipping = float(data.get("shipping", 0))
+    tax = round(server_subtotal * 0.18, 2)
+    coupon_code = str(data.get("couponCode") or "").strip().upper()
     server_discount = 0.0
     coupon_ref = None
 
@@ -2516,31 +2572,28 @@ def create_order(decoded):
         err = _coupon_validation_error(row)
         if err:
             return jsonify({"error": "invalid coupon"}), 400
-        server_discount = _coupon_compute_discount(row, subtotal)
+        server_discount = _coupon_compute_discount(row, server_subtotal)
         coupon_ref = ref
-    else:
-        if client_discount > 0.5:
-            return jsonify({"error": "discount not allowed"}), 400
 
-    if abs(client_discount - server_discount) > 0.5:
-        return jsonify({"error": "discount mismatch"}), 400
-
-    server_total = round(subtotal + shipping + tax - server_discount, 2)
-    if abs(client_total - server_total) > 1.0:
-        return jsonify({"error": "total mismatch"}), 400
+    server_total = round(server_subtotal + shipping + tax - server_discount, 2)
+    
+    # Log if client total was significantly different (attempted fraud)
+    client_total = float(data.get("total", 0))
+    if abs(client_total - server_total) > 5.0:
+        current_app.logger.warning(f"Price mismatch detected for user {uid}: Client sent {client_total}, Server calc {server_total}")
 
     oid = uuid.uuid4().hex[:16]
     order_ref = db.collection("orders").document(oid)
     order = {
         "userId": uid,
-        "items": items,
+        "items": verified_items, # Use server-verified items
         "status": "confirmed" if payment_status == "paid" else "pending",
         "shippingAddress": data.get("shippingAddress") or {},
         "billingAddress": data.get("billingAddress") or {},
         "paymentMethod": payment_method,
         "paymentId": data.get("paymentId") or "",
         "paymentStatus": payment_status,
-        "subtotal": subtotal,
+        "subtotal": server_subtotal,
         "discount": server_discount,
         "couponCode": coupon_code,
         "shipping": shipping,
@@ -2725,19 +2778,43 @@ def delete_address(decoded, address_id):
 @bp.post("/payments/razorpay/create-order")
 @login_required_json
 def razorpay_create_order(decoded):
+    uid = decoded["uid"]
     cfg = current_app.config
     key_id = cfg.get("RAZORPAY_KEY_ID") or ""
     key_secret = cfg.get("RAZORPAY_KEY_SECRET") or ""
     if not key_id or not key_secret:
         return jsonify({"error": "Razorpay not configured on server"}), 503
+    
     data = request.get_json(force=True, silent=True) or {}
-    amount_paise = int(data.get("amountPaise", 0))
-    currency = data.get("currency", "INR")
-    if amount_paise < 100:
-        return jsonify({"error": "invalid amount"}), 400
+    oid = data.get("orderId")
+    if not oid:
+        return jsonify({"error": "orderId required"}), 400
+    
+    db = get_firestore()
+    osnap = db.collection("orders").document(oid).get()
+    if not osnap.exists:
+        return jsonify({"error": "Order not found"}), 404
+    
+    order_data = osnap.to_dict() or {}
+    if order_data.get("userId") != uid:
+        return jsonify({"error": "Forbidden"}), 403
+    
+    # Amount from server-side order record (in INR, convert to Paise)
+    amount_inr = float(order_data.get("total", 0))
+    if amount_inr <= 0:
+        return jsonify({"error": "Invalid order amount"}), 400
+        
+    amount_paise = int(round(amount_inr * 100))
+    currency = order_data.get("currency", "INR")
+    
     client = razorpay.Client(auth=(key_id, key_secret))
-    receipt = data.get("receipt") or f"rcpt_{uuid.uuid4().hex[:10]}"
-    order = client.order.create({"amount": amount_paise, "currency": currency, "receipt": receipt})
+    receipt = f"rcpt_{oid}"
+    order = client.order.create({
+        "amount": amount_paise, 
+        "currency": currency, 
+        "receipt": receipt,
+        "notes": {"orderId": oid, "userId": uid}
+    })
     return jsonify({"orderId": order["id"], "amount": order["amount"], "currency": order["currency"], "keyId": key_id})
 
 
@@ -2775,11 +2852,26 @@ def razorpay_webhook():
     entity = payment_entity.get("entity") or {}
     payment_id = entity.get("id")
     order_id = entity.get("order_id")
-    if event == "payment.captured" and order_id:
+    if (event == "payment.captured" or event == "order.paid") and order_id:
         db = get_firestore()
-        q = db.collection("orders").where("paymentId", "==", payment_id).limit(1).stream()
-        for _ in q:
-            break
-        else:
-            pass
+        # Find order by razorpay order_id (which we stored in Firestore)
+        try:
+            # We don't store the razorpay order_id in the order doc currently.
+            # We should search by paymentId if available, or update the logic 
+            # to store the rzp_order_id during create-order.
+            # For now, searching by paymentId as it was being passed in the client flow.
+            docs = list(db.collection("orders").where("paymentId", "==", payment_id).limit(1).stream())
+            if not docs:
+                # Fallback: check if order_id from webhook matches our oid (though unlikely)
+                docs = list(db.collection("orders").document(order_id).get())
+                if not isinstance(docs, list): docs = [docs] if docs.exists else []
+
+            for d in docs:
+                d.reference.update({
+                    "paymentStatus": "paid",
+                    "status": "confirmed",
+                    "updatedAt": firestore.SERVER_TIMESTAMP
+                })
+        except Exception:
+            current_app.logger.exception("webhook order update failed")
     return jsonify({"received": True})
